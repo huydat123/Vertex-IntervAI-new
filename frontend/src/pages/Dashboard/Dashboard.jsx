@@ -1,4 +1,5 @@
 import { formatFileSize, formatUploadDate } from '../../services/cvStorage.js'
+import { formatInterviewDate } from '../../services/interviewStorage.js'
 import './Dashboard.css'
 
 const navItems = [
@@ -54,15 +55,34 @@ const fallbackUser = {
   role: 'user',
 }
 
-export default function Dashboard({ cvAnalysis, currentUser = fallbackUser, onNavigate = () => {}, onLogout = () => {} }) {
+export default function Dashboard({
+  cvAnalysis,
+  interviewResult,
+  currentUser = fallbackUser,
+  onNavigate = () => {},
+  onLogout = () => {},
+}) {
   const hasUploadedCv = Boolean(cvAnalysis)
   const analysis = cvAnalysis ?? fallbackCvAnalysis
+  const latestInterviewScore = interviewResult?.overallScore ?? 78
+  const averageScore = interviewResult ? Math.round((analysis.cvScore + latestInterviewScore) / 2) : 81
+  const interviewRows = interviewResult
+    ? [
+      {
+        role: interviewResult.role,
+        date: formatInterviewDate(interviewResult.completedAt),
+        score: interviewResult.overallScore,
+        status: interviewResult.status,
+      },
+      ...interviews.slice(0, 2),
+    ]
+    : interviews
   const firstName = currentUser.fullName?.split(' ')[0] ?? 'Candidate'
   const stats = [
     { label: 'CV Score', value: String(analysis.cvScore), suffix: '/100', icon: 'file', tone: 'purple' },
-    { label: 'Latest Interview', value: '78', suffix: '/100', icon: 'mic', tone: 'green' },
-    { label: 'Completed Interviews', value: '12', suffix: '', icon: 'check', tone: 'orange' },
-    { label: 'Average Score', value: '81', suffix: '/100', icon: 'chart', tone: 'blue' },
+    { label: 'Latest Interview', value: String(latestInterviewScore), suffix: '/100', icon: 'mic', tone: 'green' },
+    { label: 'Completed Interviews', value: interviewResult ? '1' : '12', suffix: '', icon: 'check', tone: 'orange' },
+    { label: 'Average Score', value: String(averageScore), suffix: '/100', icon: 'chart', tone: 'blue' },
   ]
 
   return (
@@ -98,8 +118,8 @@ export default function Dashboard({ cvAnalysis, currentUser = fallbackUser, onNa
               <div className="workflow-strip" aria-label="Interview workflow status">
                 <WorkflowStep icon="file" label="CV Parsed" status={hasUploadedCv ? 'Done' : 'Demo'} active />
                 <WorkflowStep icon="brain" label="Questions" status="Ready" active={hasUploadedCv} />
-                <WorkflowStep icon="mic" label="Voice Round" status="Next" />
-                <WorkflowStep icon="chart" label="Talent Graph" status="After" />
+                <WorkflowStep icon="mic" label="Voice Round" status={interviewResult ? 'Done' : 'Next'} active={Boolean(interviewResult)} />
+                <WorkflowStep icon="chart" label="Talent Graph" status={interviewResult ? 'Updated' : 'After'} active={Boolean(interviewResult)} />
               </div>
             </section>
 
@@ -130,7 +150,7 @@ export default function Dashboard({ cvAnalysis, currentUser = fallbackUser, onNa
                   <PanelHeader title="Assessment Score" description="Latest AI evaluation" />
                   <div className="score-rings">
                     <ScoreRing label="CV" value={analysis.cvScore} color="#7c3aed" />
-                    <ScoreRing label="Interview" value={78} color="#10b981" />
+                    <ScoreRing label="Interview" value={latestInterviewScore} color="#10b981" />
                   </div>
                 </section>
 
@@ -175,7 +195,7 @@ export default function Dashboard({ cvAnalysis, currentUser = fallbackUser, onNa
                     <span role="columnheader">Score</span>
                     <span role="columnheader">Status</span>
                   </div>
-                  {interviews.map((interview) => (
+                  {interviewRows.map((interview) => (
                     <div className="table-row" role="row" key={`${interview.role}-${interview.date}`}>
                       <span role="cell">{interview.role}</span>
                       <span role="cell">{interview.date}</span>

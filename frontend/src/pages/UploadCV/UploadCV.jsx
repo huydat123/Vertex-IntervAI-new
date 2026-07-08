@@ -240,9 +240,15 @@ export default function UploadCV({
                     <h3>CV Analysis Result</h3>
                     <p>Latest parsed profile from the upload flow.</p>
                   </div>
-                  <button className="secondary-upload-action" type="button" onClick={() => onNavigate('dashboard')}>
-                    View Dashboard
-                  </button>
+                  <div className="analysis-actions">
+                    <button className="secondary-upload-action" type="button" onClick={() => onNavigate('dashboard')}>
+                      View Dashboard
+                    </button>
+                    <button className="primary-upload-action" type="button" onClick={() => onNavigate('interview')}>
+                      <Icon name="mic" />
+                      Start AI Interview
+                    </button>
+                  </div>
                 </div>
 
                 <div className="analysis-grid">
@@ -258,6 +264,8 @@ export default function UploadCV({
                   <ResultBlock title="Experience" items={latestAnalysis.experience} />
                   <ResultBlock title="Certificates" items={latestAnalysis.certificates} />
                 </div>
+
+                <InterviewPreparation analysis={latestAnalysis} />
               </section>
             ) : null}
           </div>
@@ -337,6 +345,41 @@ function ResultBlock({ title, items }) {
   )
 }
 
+function InterviewPreparation({ analysis }) {
+  const skills = analysis.skills?.slice(0, 5) ?? []
+
+  return (
+    <section className="interview-prep" aria-label="Interview preparation">
+      <div className="prep-copy">
+        <span className="prep-icon"><Icon name="brain" /></span>
+        <div>
+          <h4>Interview Preparation</h4>
+          <p>
+            The next interview will use this CV score, suggested role, and extracted skills to
+            create focused mock questions.
+          </p>
+        </div>
+      </div>
+
+      <div className="prep-grid">
+        <PrepItem label="Suggested Role" value={analysis.suggestedPosition} />
+        <PrepItem label="Interview Level" value={getInterviewLevel(analysis.cvScore)} />
+        <PrepItem label="Estimated Questions" value="5 questions" />
+        <PrepItem label="Main Skills" value={skills.join(', ') || 'React, Python, AWS'} />
+      </div>
+    </section>
+  )
+}
+
+function PrepItem({ label, value }) {
+  return (
+    <div className="prep-item">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  )
+}
+
 function getStatusLabel(status) {
   const labels = {
     idle: 'Waiting for file',
@@ -355,6 +398,12 @@ function getStepState(status, index) {
   if (status === 'uploading') return index <= 1 ? 'active' : ''
   if (status === 'ready') return index === 0 ? 'active' : ''
   return ''
+}
+
+function getInterviewLevel(score) {
+  if (score >= 85) return 'Strong candidate'
+  if (score >= 70) return 'Ready for mock interview'
+  return 'Foundation review'
 }
 
 function createDashboardAnalysis(file, uploadedCv, userId) {

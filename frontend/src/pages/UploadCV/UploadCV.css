@@ -119,6 +119,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 44px;
   padding: 0 16px;
   border: 0;
@@ -256,6 +257,12 @@
   flex-wrap: wrap;
 }
 
+.analysis-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .analysis-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -308,9 +315,90 @@
   font-size: 15px;
 }
 
+.interview-prep {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(124, 58, 237, 0.06)),
+    #fbfbfe;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.prep-copy {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.prep-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  place-items: center;
+  color: #047857;
+  background: #e6f8f1;
+  border-radius: 8px;
+}
+
+.prep-copy h4,
+.prep-copy p {
+  margin: 0;
+}
+
+.prep-copy h4 {
+  color: #171923;
+  font-size: 17px;
+}
+
+.prep-copy p {
+  max-width: 760px;
+  margin-top: 5px;
+  color: #697184;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.prep-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.prep-item {
+  min-width: 0;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.prep-item span,
+.prep-item strong {
+  display: block;
+}
+
+.prep-item span {
+  color: #7b8191;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.prep-item strong {
+  margin-top: 7px;
+  overflow-wrap: anywhere;
+  color: #202432;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
 @media (max-width: 1180px) {
   .upload-grid,
-  .analysis-grid {
+  .analysis-grid,
+  .prep-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -319,7 +407,8 @@
   .upload-hero,
   .upload-grid,
   .analysis-grid,
-  .analysis-sections {
+  .analysis-sections,
+  .prep-grid {
     grid-template-columns: 1fr;
   }
 
@@ -345,8 +434,13 @@
   }
 
   .dropzone-actions,
+  .analysis-actions,
   .primary-upload-action,
   .secondary-upload-action {
     width: 100%;
+  }
+
+  .prep-copy {
+    flex-direction: column;
   }
 }

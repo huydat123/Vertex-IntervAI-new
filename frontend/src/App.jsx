@@ -6,6 +6,7 @@ import Profile from './pages/Profile/Profile.jsx'
 import UploadCV from './pages/UploadCV/UploadCV.jsx'
 import { loadAuthUser, logoutAuthUser } from './services/authService.js'
 import { loadCvAnalysis } from './services/cvStorage.js'
+import { loadInterviewResult } from './services/interviewStorage.js'
 
 const availablePages = ['dashboard', 'upload-cv', 'interview', 'profile']
 
@@ -13,6 +14,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(() => loadAuthUser())
   const [currentPage, setCurrentPage] = useState('dashboard')
   const [cvAnalysis, setCvAnalysis] = useState(() => loadCvAnalysis())
+  const [interviewResult, setInterviewResult] = useState(() => loadInterviewResult())
 
   function handleNavigate(page) {
     if (availablePages.includes(page)) {
@@ -22,6 +24,10 @@ function App() {
 
   function handleUploadComplete(analysis) {
     setCvAnalysis(analysis)
+  }
+
+  function handleInterviewComplete(result) {
+    setInterviewResult(result)
   }
 
   function handleLogin(user) {
@@ -58,6 +64,7 @@ function App() {
         currentUser={currentUser}
         onNavigate={handleNavigate}
         onLogout={handleLogout}
+        onInterviewComplete={handleInterviewComplete}
       />
     )
   }
@@ -76,6 +83,7 @@ function App() {
   return (
     <Dashboard
       cvAnalysis={cvAnalysis}
+      interviewResult={interviewResult}
       currentUser={currentUser}
       onNavigate={handleNavigate}
       onLogout={handleLogout}

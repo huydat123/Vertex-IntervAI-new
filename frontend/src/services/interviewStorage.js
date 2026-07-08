@@ -1,0 +1,113 @@
+const INTERVIEW_RESULT_KEY = 'talentGraph.interviewResult'
+
+export function loadInterviewResult() {
+  try {
+    const stored = window.localStorage.getItem(INTERVIEW_RESULT_KEY)
+    return stored ? JSON.parse(stored) : null
+  } catch {
+    return null
+  }
+}
+
+export function saveInterviewResult(result) {
+  window.localStorage.setItem(INTERVIEW_RESULT_KEY, JSON.stringify(result))
+}
+
+export function createInterviewResult({ session, currentUser, cvAnalysis, answers }) {
+  const completedAt = new Date().toISOString()
+  const scoredAnswers = answers.filter((answer) => Number.isFinite(answer.score))
+  const overallScore = scoredAnswers.length
+    ? Math.round(scoredAnswers.reduce((total, answer) => total + answer.score, 0) / scoredAnswers.length)
+    : 0
+  const strongAnswers = scoredAnswers.filter((answer) => answer.score >= 80).length
+  const weakAnswers = scoredAnswers.filter((answer) => answer.score < 60).length
+
+  return {
+    interviewId: session.interviewId,
+    userId: currentUser.userId,
+    candidateName: currentUser.fullName,
+    role: session.role,
+    cvId: cvAnalysis?.cvId,
+    cvScore: cvAnalysis?.cvScore,
+    overallScore,
+    status: 'Completed',
+    totalQuestions: session.questions.length,
+    answeredQuestions: scoredAnswers.length,
+    completedAt,
+    focus: session.focus,
+    strengths: buildStrengths(strongAnswers, overallScore),
+    improvements: buildImprovements(weakAnswers, overallScore),
+    recommendation: buildRecommendation(overallScore),
+    answers: scoredAnswers,
+  }
+}
+
+export function formatInterviewDate(value) {
+  if (!value) return 'Not completed'
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: '2-digit',
+    year: 'numeric',
+  }).format(new Date(value))
+}
+
+function buildStrengths(strongAnswers, overallScore) {
+  if (overallScore >= 85) {
+    return [
+      'Clear technical communication',
+      'Good project examples',
+      'Strong interview readiness',
+    ]
+  }
+
+  if (strongAnswers >= 2) {
+    return [
+      'Good technical foundation',
+      'Able to connect skills with project work',
+      'Ready for more practice rounds',
+    ]
+  }
+
+  return [
+    'Understands the interview topic',
+    'Can improve with more structured answers',
+    'Needs more concrete examples',
+  ]
+}
+
+function buildImprovements(weakAnswers, overallScore) {
+  if (overallScore >= 85 && weakAnswers === 0) {
+    return [
+      'Add more measurable results',
+      'Explain tradeoffs more clearly',
+      'Prepare deeper system design examples',
+    ]
+  }
+
+  if (overallScore >= 70) {
+    return [
+      'Use the STAR structure more consistently',
+      'Add one result or metric to each answer',
+      'Explain debugging steps in more detail',
+    ]
+  }
+
+  return [
+    'Avoid very short answers',
+    'Mention specific tools and technologies',
+    'Connect every answer to one real project',
+  ]
+}
+
+function buildRecommendation(overallScore) {
+  if (overallScore >= 85) {
+    return 'Strong performance. You can move to a harder technical round with deeper architecture, debugging, and cloud questions.'
+  }
+
+  if (overallScore >= 70) {
+    return 'Good foundation. Practice adding concrete project context, measurable results, and tradeoffs to make answers more convincing.'
+  }
+
+  return 'Needs more practice before a real interview. Focus on answering with one project example, one technology, and one result for every question.'
+}

@@ -1,12 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   askMockAi,
   createInitialMessages,
   createInterviewSession,
   createMockTranscript,
+  enhanceInterviewFeedback,
   speakText,
   stopSpeaking,
 } from '../../services/interviewService.js'
+import { createInterviewOnAws, submitAnswerToAws } from '../../services/interviewApi.js'
+import { createInterviewResult, saveInterviewResult } from '../../services/interviewStorage.js'
 import './Interview.css'
 
 const navItems = [
@@ -36,6 +39,7 @@ export default function Interview({
   currentUser = fallbackUser,
   onNavigate = () => {},
   onLogout = () => {},
+  onInterviewComplete = () => {},
 }) {
   const videoRef = useRef(null)
   const cameraStreamRef = useRef(null)
@@ -43,7 +47,7 @@ export default function Interview({
   const audioStreamRef = useRef(null)
   const chunksRef = useRef([])
 
-  const session = useMemo(() => createInterviewSession(cvAnalysis), [cvAnalysis])
+  const [session, setSession] = useState(() => createInterviewSession(cvAnalysis))
   const [messages, setMessages] = useState(() => createInitialMessages(session, currentUser))
   const [questionIndex, setQuestionIndex] = useState(0)
   const [draft, setDraft] = useState('')
@@ -52,6 +56,11 @@ export default function Interview({
   const [isAiThinking, setIsAiThinking] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [voiceError, setVoiceError] = useState('')
+  const [answerReviews, setAnswerReviews] = useState([])
+  const [interviewResult, setInterviewResult] = useState(null)
+  const [isCompleted, setIsCompleted] = useState(false)
+  const [interviewSource, setInterviewSource] = useState('Mock AI')
+  const [apiStatus, setApiStatus] = useState('Connecting to AWS interview API...')
 
   const currentQuestion = session.questions[questionIndex] ?? session.questions[0]
   const progress = Math.round(((questionIndex + 1) / session.questions.length) * 100)
@@ -63,6 +72,66 @@ export default function Interview({
       stopSpeaking()
     }
   }, [])
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadAwsInterview() {
+      try {
+        const awsSession = await createInterviewOnAws({ cvAnalysis, currentUser })
+
+        if (!isMounted || !awsSession.questions.length) {
+          return
+        }
+
+        setSession(awsSession)
+        setMessages(createInitialMessages(awsSession, currentUser))
+        setQuestionIndex(0)
+        setAnswerReviews([])
+        setInterviewResult(null)
+        setIsCompleted(false)
+        setInterviewSource('AWS')
+        setApiStatus('Using AWS Lambda + DynamoDB')
+      } catch (error) {
+        if (isMounted) {
+          setInterviewSource('Mock AI')
+          setApiStatus(`Using local fallback: ${error.message}`)
+        }
+      }
+    }
+
+    loadAwsInterview()
+
+    return () => {
+      isMounted = false
+    }
+  }, [cvAnalysis, currentUser])
+
+  async function resetInterview(nextSession = createInterviewSession(cvAnalysis)) {
+    stopSpeaking()
+    stopRecording()
+    setApiStatus('Creating a new interview session...')
+
+    try {
+      const awsSession = await createInterviewOnAws({ cvAnalysis, currentUser })
+      setSession(awsSession)
+      setMessages(createInitialMessages(awsSession, currentUser))
+      setInterviewSource('AWS')
+      setApiStatus('Using AWS Lambda + DynamoDB')
+    } catch (error) {
+      setSession(nextSession)
+      setMessages(createInitialMessages(nextSession, currentUser))
+      setInterviewSource('Mock AI')
+      setApiStatus(`Using local fallback: ${error.message}`)
+    }
+
+    setQuestionIndex(0)
+    setDraft('')
+    setIsAiThinking(false)
+    setAnswerReviews([])
+    setInterviewResult(null)
+    setIsCompleted(false)
+  }
 
   async function toggleCamera() {
     if (cameraEnabled) {
@@ -166,7 +235,7 @@ export default function Interview({
   async function sendAnswer(answerText = draft) {
     const answer = answerText.trim()
 
-    if (!answer || isAiThinking) {
+    if (!answer || isAiThinking || isCompleted) {
       return
     }
 
@@ -181,20 +250,88 @@ export default function Interview({
     setDraft('')
     setIsAiThinking(true)
 
-    const aiResult = await askMockAi({ answer, question: currentQuestion, questionIndex })
-    const nextQuestionIndex = Math.min(questionIndex + 1, session.questions.length - 1)
+    let aiResult
+
+    try {
+      aiResult = interviewSource === 'AWS'
+        ? await submitAnswerToAws({
+          userId: currentUser.userId,
+          interviewId: session.interviewId,
+          questionIndex,
+          question: currentQuestion,
+          answer,
+        })
+        : await askMockAi({ answer, question: currentQuestion, questionIndex })
+    } catch (error) {
+      setApiStatus(`AWS answer API failed, using fallback: ${error.message}`)
+      setInterviewSource('Mock AI')
+      aiResult = await askMockAi({ answer, question: currentQuestion, questionIndex })
+    }
+
+    aiResult = enhanceInterviewFeedback({
+      aiResult,
+      question: currentQuestion,
+      answer,
+      currentUser,
+      session,
+      cvAnalysis,
+    })
+
+    const shouldAdvance = aiResult.shouldAdvance ?? true
+    const isLastQuestion = questionIndex >= session.questions.length - 1
+    const nextQuestionIndex = shouldAdvance
+      ? Math.min(questionIndex + 1, session.questions.length - 1)
+      : questionIndex
     const nextQuestion = session.questions[nextQuestionIndex] ?? aiResult.nextQuestion
+    const review = {
+      question: currentQuestion,
+      answer,
+      score: aiResult.score,
+      level: aiResult.level,
+      feedback: aiResult.feedback,
+      answeredAt: new Date().toISOString(),
+    }
+    const acceptedReviews = shouldAdvance ? [...answerReviews, review] : answerReviews
+    const completedResult = shouldAdvance && isLastQuestion
+      ? createInterviewResult({
+        session,
+        currentUser,
+        cvAnalysis,
+        answers: acceptedReviews,
+      })
+      : null
     const aiMessage = {
       id: createId(),
       sender: 'ai',
-      text: `${aiResult.feedback} Next question: ${nextQuestion}`,
+      text: getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion }),
       score: aiResult.score,
       createdAt: new Date().toISOString(),
     }
 
     setMessages((current) => [...current, aiMessage])
-    setQuestionIndex(nextQuestionIndex)
+    setAnswerReviews(acceptedReviews)
+
+    if (completedResult) {
+      saveInterviewResult(completedResult)
+      setInterviewResult(completedResult)
+      setIsCompleted(true)
+      onInterviewComplete(completedResult)
+    } else {
+      setQuestionIndex(nextQuestionIndex)
+    }
+
     setIsAiThinking(false)
+  }
+
+  function handleComposerKeyDown(event) {
+    if (event.nativeEvent.isComposing) {
+      return
+    }
+
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      sendAnswer()
+    }
   }
 
   return (
@@ -243,6 +380,8 @@ export default function Interview({
                   <div className="question-progress" aria-label="Question progress">
                     <span>{questionIndex + 1}/{session.questions.length}</span>
                     <div className="mini-progress"><i style={{ width: `${progress}%` }} /></div>
+                    <small>{session.focus}</small>
+                    <small>{interviewSource}</small>
                   </div>
                 </div>
 
@@ -283,27 +422,11 @@ export default function Interview({
                 {voiceError ? <p className="interview-error">{voiceError}</p> : null}
               </div>
 
-              <aside className="panel question-card">
-                <div className="panel-header">
-                  <div>
-                    <h3>Current Question</h3>
-                    <p>Use voice recording or chat to answer.</p>
-                  </div>
-                </div>
-                <p className="question-text">{currentQuestion}</p>
-                <div className="answer-mode-grid">
-                  <ModeCard icon="mic" title="Voice Answer" text="Record now, mock transcript fills the chat box." active={isRecording} />
-                  <ModeCard icon="message" title="Chat Answer" text="Type your answer and send it to the AI interviewer." />
-                </div>
-              </aside>
-            </section>
-
-            <section className="interview-lower-grid">
               <div className="panel chat-panel">
                 <div className="panel-header">
                   <div>
                     <h3>Conversation</h3>
-                    <p>Mock AI feedback now, AWS services later.</p>
+                    <p>{apiStatus}</p>
                   </div>
                 </div>
 
@@ -328,15 +451,51 @@ export default function Interview({
                   <textarea
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
-                    placeholder="Type your answer here, or record voice to create a mock transcript..."
+                    onKeyDown={handleComposerKeyDown}
+                    placeholder={isCompleted ? 'Interview completed. Start a new interview to answer again.' : 'Type your answer here. Press Enter to send, Shift + Enter for a new line.'}
                     rows="3"
+                    disabled={isCompleted}
                   />
-                  <button className="send-button" type="submit" disabled={!draft.trim() || isAiThinking}>
+                  <button className="send-button" type="submit" disabled={!draft.trim() || isAiThinking || isCompleted}>
                     <Icon name="send" />
                     Send
                   </button>
                 </form>
               </div>
+            </section>
+
+            {interviewResult ? (
+              <InterviewResultPanel
+                result={interviewResult}
+                onNavigate={onNavigate}
+                onRestart={() => resetInterview()}
+              />
+            ) : null}
+
+            <section className="interview-lower-grid">
+              <aside className="panel question-card">
+                <div className="panel-header">
+                  <div>
+                    <h3>Current Question</h3>
+                    <p>Use voice recording or chat to answer.</p>
+                  </div>
+                  <button className="new-question-set-button" type="button" onClick={() => resetInterview()}>
+                    <Icon name="shuffle" />
+                    {isCompleted ? 'New Interview' : 'New Set'}
+                  </button>
+                </div>
+                {isCompleted ? (
+                  <CompletionSummary result={interviewResult} />
+                ) : (
+                  <>
+                    <p className="question-text">{currentQuestion}</p>
+                    <div className="answer-mode-grid">
+                      <ModeCard icon="mic" title="Voice Answer" text="Record now, mock transcript fills the chat box." active={isRecording} />
+                      <ModeCard icon="message" title="Chat Answer" text="Type your answer and send it to the AI interviewer." />
+                    </div>
+                  </>
+                )}
+              </aside>
 
               <aside className="panel aws-panel">
                 <div className="panel-header">
@@ -361,6 +520,73 @@ export default function Interview({
           </div>
         </main>
       </div>
+    </div>
+  )
+}
+
+function getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion }) {
+  if (!shouldAdvance) {
+    return `${aiResult.feedback}\n\nTry again: ${nextQuestion}`
+  }
+
+  if (isLastQuestion) {
+    return `${aiResult.feedback}\n\nInterview completed. Your final result is ready below.`
+  }
+
+  return `${aiResult.feedback}\n\nNext question: ${nextQuestion}`
+}
+
+function CompletionSummary({ result }) {
+  return (
+    <div className="completion-summary">
+      <strong>{result?.overallScore ?? 0}/100</strong>
+      <span>Final interview score</span>
+      <p>{result?.recommendation}</p>
+    </div>
+  )
+}
+
+function InterviewResultPanel({ result, onNavigate, onRestart }) {
+  return (
+    <section className="panel interview-result-panel" aria-label="Interview result">
+      <div className="result-score-card">
+        <span>Final Score</span>
+        <strong>{result.overallScore}<small>/100</small></strong>
+        <p>{result.role}</p>
+      </div>
+
+      <div className="result-detail-grid">
+        <ResultList title="Strengths" items={result.strengths} />
+        <ResultList title="Needs Improvement" items={result.improvements} />
+      </div>
+
+      <div className="result-recommendation">
+        <h3>AI Recommendation</h3>
+        <p>{result.recommendation}</p>
+        <div className="result-actions">
+          <button className="secondary-result-action" type="button" onClick={onRestart}>
+            <Icon name="shuffle" />
+            New Interview
+          </button>
+          <button className="primary-result-action" type="button" onClick={() => onNavigate('dashboard')}>
+            <Icon name="chart" />
+            View Dashboard
+          </button>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function ResultList({ title, items }) {
+  return (
+    <div className="result-list">
+      <h3>{title}</h3>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </div>
   )
 }
@@ -464,6 +690,7 @@ function Icon({ name }) {
     volume: <path d="M4 10v4h4l5 4V6l-5 4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />,
     stop: <rect x="7" y="7" width="10" height="10" rx="1.5" />,
     send: <path d="M4 12 20 4l-5 16-3-7zM20 4l-8 9" />,
+    shuffle: <path d="M16 3h5v5M4 17h3.5c2.2 0 3.2-1.3 4.3-3.8l.4-.9C13.3 8.8 14.5 7 17 7h4M16 21h5v-5M4 7h3.5c1.8 0 2.9.9 3.8 2.7M14 15.3c.8 1.1 1.8 1.7 3 1.7h4" />,
     logout: <path d="M10 17l5-5-5-5M15 12H3M21 4v16" />,
     arrowLeft: <path d="M15 18l-6-6 6-6" />,
   }
