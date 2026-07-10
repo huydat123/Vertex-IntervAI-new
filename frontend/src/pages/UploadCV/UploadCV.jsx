@@ -262,7 +262,7 @@ export default function UploadCV({
                   <ResultBlock title="Extracted Skills" items={latestAnalysis.skills} />
                   <ResultBlock title="Projects" items={latestAnalysis.projects} />
                   <ResultBlock title="Experience" items={latestAnalysis.experience} />
-                  <ResultBlock title="Certificates" items={latestAnalysis.certificates} />
+                  <ResultBlock title="Certificates & Languages" items={latestAnalysis.certificates} />
                 </div>
 
                 <InterviewPreparation analysis={latestAnalysis} />

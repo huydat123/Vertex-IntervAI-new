@@ -1,4 +1,6 @@
 const CV_STORAGE_KEY = 'talentGraph.cvAnalysis'
+const CV_HISTORY_KEY = 'talentGraph.cvHistory'
+const MAX_HISTORY_ITEMS = 20
 const MAX_CV_SIZE = 10 * 1024 * 1024
 const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx']
 const ALLOWED_TYPES = [
@@ -18,6 +20,20 @@ export function loadCvAnalysis() {
 
 export function saveCvAnalysis(analysis) {
   window.localStorage.setItem(CV_STORAGE_KEY, JSON.stringify(analysis))
+  saveCvHistory(upsertHistoryItem(loadCvHistory(), analysis, getCvHistoryKey))
+}
+
+export function loadCvHistory() {
+  try {
+    const stored = window.localStorage.getItem(CV_HISTORY_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveCvHistory(items) {
+  window.localStorage.setItem(CV_HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS)))
 }
 
 export function validateCvFile(file) {
@@ -104,4 +120,19 @@ function createId() {
   }
 
   return `cv-${Date.now()}`
+}
+
+function getCvHistoryKey(item) {
+  return item?.cvId || `${item?.fileName || 'cv'}-${item?.uploadedAt || item?.createdAt || ''}`
+}
+
+function upsertHistoryItem(items, item, getKey) {
+  if (!item) {
+    return items
+  }
+
+  const key = getKey(item)
+  const nextItems = [item, ...items.filter((current) => getKey(current) !== key)]
+
+  return nextItems.slice(0, MAX_HISTORY_ITEMS)
 }

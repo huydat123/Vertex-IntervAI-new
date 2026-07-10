@@ -233,6 +233,17 @@
   border-color: #ef4444;
 }
 
+.round-control.processing {
+  color: #ffffff;
+  background: #0f766e;
+  border-color: #0f766e;
+  cursor: wait;
+}
+
+.round-control:disabled {
+  opacity: 0.72;
+}
+
 .interview-error {
   margin: 14px 0 0;
   padding: 12px 14px;

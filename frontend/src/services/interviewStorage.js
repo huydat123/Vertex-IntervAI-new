@@ -1,4 +1,6 @@
 const INTERVIEW_RESULT_KEY = 'talentGraph.interviewResult'
+const INTERVIEW_HISTORY_KEY = 'talentGraph.interviewHistory'
+const MAX_HISTORY_ITEMS = 20
 
 export function loadInterviewResult() {
   try {
@@ -11,6 +13,20 @@ export function loadInterviewResult() {
 
 export function saveInterviewResult(result) {
   window.localStorage.setItem(INTERVIEW_RESULT_KEY, JSON.stringify(result))
+  saveInterviewHistory(upsertHistoryItem(loadInterviewHistory(), result, getInterviewHistoryKey))
+}
+
+export function loadInterviewHistory() {
+  try {
+    const stored = window.localStorage.getItem(INTERVIEW_HISTORY_KEY)
+    return stored ? JSON.parse(stored) : []
+  } catch {
+    return []
+  }
+}
+
+export function saveInterviewHistory(items) {
+  window.localStorage.setItem(INTERVIEW_HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS)))
 }
 
 export function createInterviewResult({ session, currentUser, cvAnalysis, answers }) {
@@ -110,4 +126,19 @@ function buildRecommendation(overallScore) {
   }
 
   return 'Needs more practice before a real interview. Focus on answering with one project example, one technology, and one result for every question.'
+}
+
+function getInterviewHistoryKey(item) {
+  return item?.interviewId || `${item?.role || 'interview'}-${item?.completedAt || ''}`
+}
+
+function upsertHistoryItem(items, item, getKey) {
+  if (!item) {
+    return items
+  }
+
+  const key = getKey(item)
+  const nextItems = [item, ...items.filter((current) => getKey(current) !== key)]
+
+  return nextItems.slice(0, MAX_HISTORY_ITEMS)
 }

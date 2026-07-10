@@ -1,5 +1,6 @@
 import { formatFileSize, formatUploadDate } from '../../services/cvStorage.js'
 import { formatInterviewDate } from '../../services/interviewStorage.js'
+import heroArtwork from '../../assets/hero.png'
 import './Dashboard.css'
 
 const navItems = [
@@ -46,7 +47,7 @@ const interviews = [
 const actions = [
   { label: 'Upload CV', icon: 'upload', tone: 'purple', page: 'upload-cv' },
   { label: 'Start Interview', icon: 'play', tone: 'green', page: 'interview' },
-  { label: 'View Result', icon: 'chart', tone: 'blue', page: 'result' },
+  { label: 'View History', icon: 'history', tone: 'blue', page: 'history' },
 ]
 
 const fallbackUser = {
@@ -57,16 +58,28 @@ const fallbackUser = {
 
 export default function Dashboard({
   cvAnalysis,
+  cvHistory = [],
   interviewResult,
+  interviewHistory = [],
   currentUser = fallbackUser,
   onNavigate = () => {},
   onLogout = () => {},
 }) {
   const hasUploadedCv = Boolean(cvAnalysis)
   const analysis = cvAnalysis ?? fallbackCvAnalysis
-  const latestInterviewScore = interviewResult?.overallScore ?? 78
-  const averageScore = interviewResult ? Math.round((analysis.cvScore + latestInterviewScore) / 2) : 81
-  const interviewRows = interviewResult
+  const mergedInterviewHistory = mergeLatestInterview(interviewHistory, interviewResult)
+  const latestInterviewScore = mergedInterviewHistory[0]?.overallScore ?? 0
+  const averageScore = latestInterviewScore ? Math.round((analysis.cvScore + latestInterviewScore) / 2) : analysis.cvScore
+  const interviewRows = mergedInterviewHistory.length
+    ? [
+      ...mergedInterviewHistory.slice(0, 3).map((interview) => ({
+        role: interview.role,
+        date: formatInterviewDate(interview.completedAt),
+        score: interview.overallScore,
+        status: interview.status || 'Completed',
+      })),
+    ]
+    : interviewResult
     ? [
       {
         role: interviewResult.role,
@@ -78,10 +91,13 @@ export default function Dashboard({
     ]
     : interviews
   const firstName = currentUser.fullName?.split(' ')[0] ?? 'Candidate'
+  const cvCount = mergeLatestCv(cvHistory, cvAnalysis).length
+  const completedInterviewCount = mergedInterviewHistory.length
+  const readinessLabel = getReadinessLabel(averageScore)
   const stats = [
     { label: 'CV Score', value: String(analysis.cvScore), suffix: '/100', icon: 'file', tone: 'purple' },
     { label: 'Latest Interview', value: String(latestInterviewScore), suffix: '/100', icon: 'mic', tone: 'green' },
-    { label: 'Completed Interviews', value: interviewResult ? '1' : '12', suffix: '', icon: 'check', tone: 'orange' },
+    { label: 'Completed Interviews', value: String(completedInterviewCount), suffix: '', icon: 'check', tone: 'orange' },
     { label: 'Average Score', value: String(averageScore), suffix: '/100', icon: 'chart', tone: 'blue' },
   ]
 
@@ -113,13 +129,27 @@ export default function Dashboard({
                     Upload New CV
                   </button>
                 </div>
+
+                <div className="workflow-strip" aria-label="Interview workflow status">
+                  <WorkflowStep icon="file" label="CV Parsed" status={hasUploadedCv ? 'Done' : 'Demo'} active />
+                  <WorkflowStep icon="brain" label="Questions" status="Ready" active={hasUploadedCv} />
+                  <WorkflowStep icon="mic" label="Voice Round" status={interviewResult ? 'Done' : 'Next'} active={Boolean(interviewResult)} />
+                  <WorkflowStep icon="chart" label="Talent Graph" status={interviewResult ? 'Updated' : 'After'} active={Boolean(interviewResult)} />
+                </div>
               </div>
 
-              <div className="workflow-strip" aria-label="Interview workflow status">
-                <WorkflowStep icon="file" label="CV Parsed" status={hasUploadedCv ? 'Done' : 'Demo'} active />
-                <WorkflowStep icon="brain" label="Questions" status="Ready" active={hasUploadedCv} />
-                <WorkflowStep icon="mic" label="Voice Round" status={interviewResult ? 'Done' : 'Next'} active={Boolean(interviewResult)} />
-                <WorkflowStep icon="chart" label="Talent Graph" status={interviewResult ? 'Updated' : 'After'} active={Boolean(interviewResult)} />
+              <div className="hero-visual" aria-label="Candidate readiness overview">
+                <img src={heroArtwork} alt="" />
+                <div className="hero-score-card">
+                  <span>Readiness</span>
+                  <strong>{averageScore}<small>/100</small></strong>
+                  <p>{readinessLabel}</p>
+                </div>
+                <div className="hero-role-card">
+                  <span>Suggested role</span>
+                  <strong>{analysis.suggestedPosition}</strong>
+                  <small>{cvCount || 1} CV analysis saved</small>
+                </div>
               </div>
             </section>
 
@@ -232,6 +262,35 @@ export default function Dashboard({
       </div>
     </div>
   )
+}
+
+function mergeLatestCv(items, latest) {
+  const source = Array.isArray(items) ? items : []
+
+  if (!latest) {
+    return source
+  }
+
+  const key = latest.cvId || latest.fileName
+  return [latest, ...source.filter((item) => (item.cvId || item.fileName) !== key)]
+}
+
+function mergeLatestInterview(items, latest) {
+  const source = Array.isArray(items) ? items : []
+
+  if (!latest) {
+    return source
+  }
+
+  const key = latest.interviewId || latest.completedAt
+  return [latest, ...source.filter((item) => (item.interviewId || item.completedAt) !== key)]
+}
+
+function getReadinessLabel(score) {
+  if (score >= 85) return 'Strong candidate'
+  if (score >= 70) return 'Ready to practice'
+  if (score > 0) return 'Needs more practice'
+  return 'Upload CV to begin'
 }
 
 function Sidebar({ currentPage, onNavigate, onLogout }) {

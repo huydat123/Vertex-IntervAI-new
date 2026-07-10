@@ -3,13 +3,17 @@ import {
   askMockAi,
   createInitialMessages,
   createInterviewSession,
-  createMockTranscript,
   enhanceInterviewFeedback,
   speakText,
   stopSpeaking,
 } from '../../services/interviewService.js'
 import { createInterviewOnAws, submitAnswerToAws } from '../../services/interviewApi.js'
 import { createInterviewResult, saveInterviewResult } from '../../services/interviewStorage.js'
+import {
+  getPreferredRecordingMimeType,
+  synthesizeQuestionAudio,
+  transcribeAnswerAudio,
+} from '../../services/voiceApi.js'
 import './Interview.css'
 
 const navItems = [
@@ -45,6 +49,10 @@ export default function Interview({
   const cameraStreamRef = useRef(null)
   const recorderRef = useRef(null)
   const audioStreamRef = useRef(null)
+  const questionAudioRef = useRef(null)
+  const browserSpeechRecognitionRef = useRef(null)
+  const browserTranscriptRef = useRef('')
+  const shouldProcessRecordingRef = useRef(false)
   const chunksRef = useRef([])
 
   const [session, setSession] = useState(() => createInterviewSession(cvAnalysis))
@@ -53,6 +61,8 @@ export default function Interview({
   const [draft, setDraft] = useState('')
   const [cameraEnabled, setCameraEnabled] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [isTranscribing, setIsTranscribing] = useState(false)
+  const [isQuestionAudioLoading, setIsQuestionAudioLoading] = useState(false)
   const [isAiThinking, setIsAiThinking] = useState(false)
   const [cameraError, setCameraError] = useState('')
   const [voiceError, setVoiceError] = useState('')
@@ -68,7 +78,9 @@ export default function Interview({
   useEffect(() => {
     return () => {
       stopCamera()
-      stopRecording()
+      stopRecording({ process: false })
+      stopQuestionAudio()
+      stopBrowserSpeechRecognition()
       stopSpeaking()
     }
   }, [])
@@ -109,7 +121,9 @@ export default function Interview({
 
   async function resetInterview(nextSession = createInterviewSession(cvAnalysis)) {
     stopSpeaking()
-    stopRecording()
+    stopQuestionAudio()
+    stopBrowserSpeechRecognition()
+    stopRecording({ process: false })
     setApiStatus('Creating a new interview session...')
 
     try {
@@ -167,6 +181,10 @@ export default function Interview({
       return
     }
 
+    if (isTranscribing) {
+      return
+    }
+
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       setVoiceError('Microphone recording is not supported in this browser.')
       return
@@ -176,7 +194,9 @@ export default function Interview({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioStreamRef.current = stream
       chunksRef.current = []
-      const recorder = new MediaRecorder(stream)
+      browserTranscriptRef.current = ''
+      const mimeType = getPreferredRecordingMimeType()
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined)
 
       recorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
@@ -184,30 +204,141 @@ export default function Interview({
         }
       }
 
-      recorder.onstop = () => {
-        const transcript = createMockTranscript(questionIndex)
-        setVoiceError('')
-        setDraft(transcript)
+      recorder.onstop = async () => {
+        stopBrowserSpeechRecognition()
+        const shouldProcess = shouldProcessRecordingRef.current
+        const recordedMimeType = recorder.mimeType || mimeType || 'audio/webm'
+        const audioBlob = new Blob(chunksRef.current, { type: recordedMimeType })
+        chunksRef.current = []
         stopAudioStream()
+
+        if (!shouldProcess) {
+          return
+        }
+
+        if (!audioBlob.size) {
+          setVoiceError('No audio was recorded. Please try again.')
+          return
+        }
+
+        setIsTranscribing(true)
+        setVoiceError('Sending your answer to Amazon Transcribe...')
+
+        try {
+          const result = await transcribeAnswerAudio({
+            audioBlob,
+            userId: currentUser.userId,
+            interviewId: session.interviewId,
+            questionIndex,
+          })
+
+          setDraft(result.transcript)
+          setVoiceError('Amazon Transcribe completed. Review the text, then press Send.')
+        } catch (error) {
+          const browserTranscript = browserTranscriptRef.current.trim()
+
+          if (browserTranscript) {
+            setDraft(browserTranscript)
+            setVoiceError(`AWS Transcribe unavailable, using browser speech recognition: ${error.message}`)
+          } else {
+            setVoiceError(`AWS Transcribe unavailable: ${error.message}. No transcript was generated. Please type your answer manually or check AWS route/IAM.`)
+          }
+        } finally {
+          setIsTranscribing(false)
+        }
       }
 
       recorderRef.current = recorder
+      shouldProcessRecordingRef.current = true
+      startBrowserSpeechRecognition()
       recorder.start()
       setIsRecording(true)
-      setVoiceError('')
+      setVoiceError('Recording your voice answer...')
     } catch {
       setVoiceError('Microphone permission was blocked or no microphone was found.')
       setIsRecording(false)
     }
   }
 
-  function stopRecording() {
+  function stopRecording({ process = true } = {}) {
+    shouldProcessRecordingRef.current = process
+    stopBrowserSpeechRecognition()
+
     if (recorderRef.current?.state === 'recording') {
       recorderRef.current.stop()
+    } else {
+      stopAudioStream()
     }
 
     setIsRecording(false)
-    stopAudioStream()
+  }
+
+  function startBrowserSpeechRecognition() {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+
+    if (!SpeechRecognition) {
+      return false
+    }
+
+    stopBrowserSpeechRecognition()
+
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.continuous = true
+    recognition.interimResults = true
+
+    recognition.onresult = (event) => {
+      let finalText = ''
+      let interimText = ''
+
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const transcript = event.results[index][0]?.transcript || ''
+
+        if (event.results[index].isFinal) {
+          finalText += `${transcript} `
+        } else {
+          interimText += `${transcript} `
+        }
+      }
+
+      if (finalText.trim()) {
+        browserTranscriptRef.current = `${browserTranscriptRef.current} ${finalText}`.trim()
+        setDraft(browserTranscriptRef.current)
+        return
+      }
+
+      if (interimText.trim()) {
+        setDraft(`${browserTranscriptRef.current} ${interimText}`.trim())
+      }
+    }
+
+    recognition.onerror = () => {}
+    recognition.onend = () => {
+      if (browserSpeechRecognitionRef.current === recognition) {
+        browserSpeechRecognitionRef.current = null
+      }
+    }
+
+    try {
+      recognition.start()
+      browserSpeechRecognitionRef.current = recognition
+      return true
+    } catch {
+      browserSpeechRecognitionRef.current = null
+      return false
+    }
+  }
+
+  function stopBrowserSpeechRecognition() {
+    if (!browserSpeechRecognitionRef.current) {
+      return
+    }
+
+    try {
+      browserSpeechRecognitionRef.current.stop()
+    } catch {
+      browserSpeechRecognitionRef.current = null
+    }
   }
 
   function stopCamera() {
@@ -224,11 +355,44 @@ export default function Interview({
     audioStreamRef.current = null
   }
 
-  function handleSpeakQuestion() {
-    const didSpeak = speakText(currentQuestion)
+  async function handleSpeakQuestion() {
+    stopQuestionAudio()
+    stopSpeaking()
+    setIsQuestionAudioLoading(true)
+    setVoiceError('Creating question audio with Amazon Polly...')
 
-    if (!didSpeak) {
-      setVoiceError('Text-to-speech is not supported in this browser.')
+    try {
+      const result = await synthesizeQuestionAudio({
+        text: currentQuestion,
+        userId: currentUser.userId,
+        interviewId: session.interviewId,
+        questionIndex,
+      })
+      const audio = new Audio(result.audioUrl)
+      questionAudioRef.current = audio
+      audio.onended = () => {
+        setVoiceError('')
+      }
+      await audio.play()
+      setVoiceError(`Playing question with Amazon Polly (${result.voiceId}).`)
+    } catch (error) {
+      const didSpeak = speakText(currentQuestion)
+
+      if (didSpeak) {
+        setVoiceError(`AWS Polly unavailable, using browser voice: ${error.message}`)
+      } else {
+        setVoiceError(`AWS Polly unavailable and browser text-to-speech is not supported: ${error.message}`)
+      }
+    } finally {
+      setIsQuestionAudioLoading(false)
+    }
+  }
+
+  function stopQuestionAudio() {
+    if (questionAudioRef.current) {
+      questionAudioRef.current.pause()
+      questionAudioRef.current.currentTime = 0
+      questionAudioRef.current = null
     }
   }
 
@@ -398,7 +562,7 @@ export default function Interview({
                     <div className="ai-avatar"><Icon name="brain" /></div>
                     <div>
                       <strong>AI Interviewer</strong>
-                      <span>{isAiThinking ? 'Reviewing your answer...' : 'Ready for your response'}</span>
+                      <span>{getInterviewerStatus({ isAiThinking, isRecording, isTranscribing, isQuestionAudioLoading })}</span>
                     </div>
                   </div>
                 </div>
@@ -407,10 +571,22 @@ export default function Interview({
                   <button className={`round-control ${cameraEnabled ? 'active' : ''}`} type="button" onClick={toggleCamera} title="Toggle camera">
                     <Icon name={cameraEnabled ? 'video' : 'videoOff'} />
                   </button>
-                  <button className={`round-control ${isRecording ? 'danger active' : ''}`} type="button" onClick={toggleRecording} title="Toggle microphone recording">
+                  <button
+                    className={`round-control ${isRecording ? 'danger active' : ''} ${isTranscribing ? 'processing' : ''}`}
+                    type="button"
+                    onClick={toggleRecording}
+                    title="Toggle microphone recording"
+                    disabled={isTranscribing}
+                  >
                     <Icon name={isRecording ? 'stop' : 'mic'} />
                   </button>
-                  <button className="round-control" type="button" onClick={handleSpeakQuestion} title="Read question aloud">
+                  <button
+                    className={`round-control ${isQuestionAudioLoading ? 'processing' : ''}`}
+                    type="button"
+                    onClick={handleSpeakQuestion}
+                    title="Read question aloud"
+                    disabled={isQuestionAudioLoading}
+                  >
                     <Icon name="volume" />
                   </button>
                   <button className="round-control" type="button" onClick={() => onNavigate('dashboard')} title="Leave interview">
@@ -426,7 +602,7 @@ export default function Interview({
                 <div className="panel-header">
                   <div>
                     <h3>Conversation</h3>
-                    <p>{apiStatus}</p>
+                    <p>{apiStatus}{isTranscribing ? ' - Amazon Transcribe is processing audio' : ''}</p>
                   </div>
                 </div>
 
@@ -456,7 +632,7 @@ export default function Interview({
                     rows="3"
                     disabled={isCompleted}
                   />
-                  <button className="send-button" type="submit" disabled={!draft.trim() || isAiThinking || isCompleted}>
+                  <button className="send-button" type="submit" disabled={!draft.trim() || isAiThinking || isCompleted || isTranscribing}>
                     <Icon name="send" />
                     Send
                   </button>
@@ -490,7 +666,12 @@ export default function Interview({
                   <>
                     <p className="question-text">{currentQuestion}</p>
                     <div className="answer-mode-grid">
-                      <ModeCard icon="mic" title="Voice Answer" text="Record now, mock transcript fills the chat box." active={isRecording} />
+                      <ModeCard
+                        icon="mic"
+                        title="Voice Answer"
+                        text="Record now, Amazon Transcribe fills the chat box."
+                        active={isRecording || isTranscribing}
+                      />
                       <ModeCard icon="message" title="Chat Answer" text="Type your answer and send it to the AI interviewer." />
                     </div>
                   </>
@@ -500,8 +681,8 @@ export default function Interview({
               <aside className="panel aws-panel">
                 <div className="panel-header">
                   <div>
-                    <h3>AWS Integration Later</h3>
-                    <p>Prepared service boundaries for the real backend.</p>
+                    <h3>AWS Voice Integration</h3>
+                    <p>Polly reads questions and Transcribe converts recorded answers.</p>
                   </div>
                 </div>
                 <div className="aws-step-list">
@@ -534,6 +715,19 @@ function getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuesti
   }
 
   return `${aiResult.feedback}\n\nNext question: ${nextQuestion}`
+}
+
+function getInterviewerStatus({
+  isAiThinking,
+  isRecording,
+  isTranscribing,
+  isQuestionAudioLoading,
+}) {
+  if (isAiThinking) return 'Reviewing your answer...'
+  if (isRecording) return 'Listening to your voice answer...'
+  if (isTranscribing) return 'Transcribing your answer with AWS...'
+  if (isQuestionAudioLoading) return 'Preparing Polly voice...'
+  return 'Ready for your response'
 }
 
 function CompletionSummary({ result }) {
