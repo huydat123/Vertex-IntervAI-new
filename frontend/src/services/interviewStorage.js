@@ -2,31 +2,39 @@ const INTERVIEW_RESULT_KEY = 'talentGraph.interviewResult'
 const INTERVIEW_HISTORY_KEY = 'talentGraph.interviewHistory'
 const MAX_HISTORY_ITEMS = 20
 
-export function loadInterviewResult() {
+export function loadInterviewResult(userId) {
   try {
-    const stored = window.localStorage.getItem(INTERVIEW_RESULT_KEY)
+    const stored = window.localStorage.getItem(getUserStorageKey(INTERVIEW_RESULT_KEY, userId))
     return stored ? JSON.parse(stored) : null
   } catch {
     return null
   }
 }
 
-export function saveInterviewResult(result) {
-  window.localStorage.setItem(INTERVIEW_RESULT_KEY, JSON.stringify(result))
-  saveInterviewHistory(upsertHistoryItem(loadInterviewHistory(), result, getInterviewHistoryKey))
+export function saveInterviewResult(result, userId = result?.userId) {
+  const resolvedUserId = getResolvedUserId(userId)
+
+  window.localStorage.setItem(getUserStorageKey(INTERVIEW_RESULT_KEY, resolvedUserId), JSON.stringify(result))
+  saveInterviewHistory(
+    upsertHistoryItem(loadInterviewHistory(resolvedUserId), result, getInterviewHistoryKey),
+    resolvedUserId,
+  )
 }
 
-export function loadInterviewHistory() {
+export function loadInterviewHistory(userId) {
   try {
-    const stored = window.localStorage.getItem(INTERVIEW_HISTORY_KEY)
+    const stored = window.localStorage.getItem(getUserStorageKey(INTERVIEW_HISTORY_KEY, userId))
     return stored ? JSON.parse(stored) : []
   } catch {
     return []
   }
 }
 
-export function saveInterviewHistory(items) {
-  window.localStorage.setItem(INTERVIEW_HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS)))
+export function saveInterviewHistory(items, userId) {
+  window.localStorage.setItem(
+    getUserStorageKey(INTERVIEW_HISTORY_KEY, userId),
+    JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS)),
+  )
 }
 
 export function createInterviewResult({ session, currentUser, cvAnalysis, answers }) {
@@ -141,4 +149,18 @@ function upsertHistoryItem(items, item, getKey) {
   const nextItems = [item, ...items.filter((current) => getKey(current) !== key)]
 
   return nextItems.slice(0, MAX_HISTORY_ITEMS)
+}
+
+function getUserStorageKey(baseKey, userId) {
+  const resolvedUserId = getResolvedUserId(userId)
+
+  return resolvedUserId ? `${baseKey}.${sanitizeUserId(resolvedUserId)}` : baseKey
+}
+
+function getResolvedUserId(userId) {
+  return typeof userId === 'string' && userId.trim() ? userId.trim() : ''
+}
+
+function sanitizeUserId(userId) {
+  return userId.replace(/[^a-zA-Z0-9._:-]/g, '_')
 }

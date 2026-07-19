@@ -1,3 +1,5 @@
+import { authFetch } from './apiClient.js'
+
 const DEFAULT_VOICE_API_BASE_URL =
   'https://j3zljogo3j.execute-api.ap-southeast-1.amazonaws.com/default'
 
@@ -11,12 +13,16 @@ export async function synthesizeQuestionAudio({
   userId,
   interviewId,
   questionIndex,
+  voiceId,
+  engine,
 }) {
   const response = await callVoiceApi('/voice/question-audio', {
     text,
     userId,
     interviewId,
     questionIndex,
+    voiceId,
+    engine,
   })
 
   if (!response.audioUrl) {
@@ -31,6 +37,7 @@ export async function transcribeAnswerAudio({
   userId,
   interviewId,
   questionIndex,
+  languageCode,
 }) {
   const fileContent = await blobToBase64(audioBlob)
   const startResponse = await callVoiceApi('/voice/transcribe', {
@@ -40,6 +47,7 @@ export async function transcribeAnswerAudio({
     questionIndex,
     contentType: audioBlob.type || 'audio/webm',
     fileContent,
+    languageCode,
   })
 
   if (!startResponse.jobName) {
@@ -95,7 +103,7 @@ async function callVoiceApi(path, body) {
   let response
 
   try {
-    response = await fetch(`${VOICE_API_BASE_URL}${path}`, {
+    response = await authFetch(`${VOICE_API_BASE_URL}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

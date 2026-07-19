@@ -1,0 +1,583 @@
+body.theme-black {
+  color: #e5edf8;
+  background: #020617;
+}
+
+body.theme-black .dashboard-page {
+  color: #e5edf8 !important;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(37, 99, 235, 0.16), transparent 26%),
+    radial-gradient(circle at 88% 18%, rgba(16, 185, 129, 0.12), transparent 22%),
+    linear-gradient(180deg, #020617, #050816 58%, #020617) !important;
+}
+
+body.theme-black .dashboard-frame,
+body.theme-black .dashboard-main {
+  background: #070b14 !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+body.theme-black .dashboard-frame {
+  box-shadow: 0 28px 76px rgba(0, 0, 0, 0.52) !important;
+}
+
+body.theme-black .topbar,
+body.theme-black .panel,
+body.theme-black .stat-card,
+body.theme-black .history-stat,
+body.theme-black .result-stat,
+body.theme-black .settings-panel,
+body.theme-black .settings-summary-panel,
+body.theme-black .interview-detail-modal {
+  color: #e5edf8 !important;
+  background: #0b1220 !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.3) !important;
+}
+
+body.theme-black .topbar {
+  border-bottom-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+body.theme-black :is(
+  .hero-panel,
+  .upload-hero,
+  .history-hero,
+  .result-hero,
+  .result-empty-hero,
+  .profile-hero,
+  .settings-hero,
+  .admin-hero,
+  .role-picker-panel
+) {
+  position: relative;
+  overflow: hidden;
+  color: #ffffff !important;
+  background:
+    linear-gradient(90deg, rgba(7, 12, 23, 0.98), rgba(18, 45, 68, 0.96) 58%, rgba(37, 80, 111, 0.92)),
+    #102033 !important;
+  border-color: rgba(148, 163, 184, 0.2) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 18px 44px rgba(0, 0, 0, 0.26) !important;
+}
+
+body.theme-black :is(
+  .hero-panel,
+  .upload-hero,
+  .history-hero,
+  .result-hero,
+  .result-empty-hero,
+  .profile-hero,
+  .settings-hero,
+  .admin-hero,
+  .role-picker-panel
+)::before {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  pointer-events: none;
+  content: '';
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.065) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.065) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0.62), transparent 82%);
+}
+
+body.theme-black :is(
+  .hero-panel,
+  .upload-hero,
+  .history-hero,
+  .result-hero,
+  .result-empty-hero,
+  .profile-hero,
+  .settings-hero,
+  .admin-hero,
+  .role-picker-panel
+) > * {
+  position: relative;
+  z-index: 1;
+}
+
+body.theme-black :is(.upload-hero-visual, .hero-visual, .admin-hero-meter) {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07)),
+    rgba(148, 163, 184, 0.12) !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+}
+
+body.theme-black .sidebar {
+  background:
+    radial-gradient(circle at 26% 8%, rgba(37, 99, 235, 0.22), transparent 24%),
+    linear-gradient(180deg, rgba(15, 23, 42, 0.96), rgba(2, 6, 23, 0.98)),
+    #020617 !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+body.theme-black .brand {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+body.theme-black :is(
+  .topbar-title h2,
+  .panel-header h3,
+  .settings-field strong,
+  .settings-toggle span,
+  .settings-summary-item strong,
+  .history-item h3,
+  .timeline-item strong,
+  .summary-item strong,
+  .profile-field strong,
+  .link-field strong,
+  .profile-cv-card strong,
+  .result-context-card strong,
+  .result-answer-heading h3,
+  .answer-review-heading strong,
+  .interview-detail-header h2,
+  .interview-detail-advice h3,
+  .detail-list-panel h3,
+  .interview-answer-section h3,
+  .skill-meta strong,
+  .skill-score span,
+  .table-row span:first-child,
+  .cv-file strong,
+  .stat-card strong,
+  .history-stat strong,
+  .result-stat strong
+) {
+  color: #f8fafc !important;
+}
+
+body.theme-black :is(
+  .topbar-title p,
+  .panel-header p,
+  .settings-save-state,
+  .settings-summary-item span,
+  .history-item p,
+  .history-item-meta span,
+  .timeline-item p,
+  .timeline-item span,
+  .summary-item span,
+  .recommendation-panel p,
+  .profile-goal-panel p,
+  .profile-field span,
+  .link-field small,
+  .profile-cv-card span,
+  .result-recommendation-panel p,
+  .result-context-card p,
+  .result-context-card small,
+  .result-point-list p,
+  .result-answer-grid p,
+  .answer-review-grid p,
+  .detail-list-panel ul,
+  .interview-detail-advice p,
+  .skill-meta span,
+  .cv-file span,
+  .table-row,
+  .stat-card span,
+  .history-stat small,
+  .result-stat small
+) {
+  color: #aab7cc !important;
+}
+
+body.theme-black :is(
+  .settings-field,
+  .settings-toggle,
+  .settings-summary-item,
+  .history-item,
+  .timeline-item,
+  .summary-item,
+  .profile-field,
+  .link-field,
+  .profile-cv-card,
+  .result-context-card,
+  .result-point-list li,
+  .result-answer-card,
+  .result-answer-grid section,
+  .answer-review-item,
+  .answer-review-grid div,
+  .detail-score-card,
+  .interview-detail-advice,
+  .detail-list-panel,
+  .profile-score,
+  .result-empty-block,
+  .history-empty,
+  .radar-wrap,
+  .cv-file,
+  .table-row
+) {
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.16) !important;
+}
+
+body.theme-black :is(input, select, textarea) {
+  color: #f8fafc !important;
+  background: #020617 !important;
+  border-color: rgba(148, 163, 184, 0.26) !important;
+}
+
+body.theme-black :is(input::placeholder, textarea::placeholder) {
+  color: #64748b !important;
+}
+
+body.theme-black .icon-button,
+body.theme-black .preference-toggle-button,
+body.theme-black .user-chip,
+body.theme-black .cv-toggle-button,
+body.theme-black .secondary-settings-action,
+body.theme-black .secondary-history-action,
+body.theme-black .history-detail-button {
+  color: #dbeafe !important;
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+body.theme-black .preference-toggle-button:hover,
+body.theme-black .preference-toggle-button.active {
+  color: #ffffff !important;
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+body.theme-black .user-chip small {
+  color: #c4b5fd !important;
+  background: rgba(124, 58, 237, 0.22) !important;
+}
+
+body.theme-black .avatar {
+  color: #f8fafc !important;
+  background: #1e293b !important;
+}
+
+body.theme-black .skill-track,
+body.theme-black .result-bars span {
+  background: #1f2937 !important;
+}
+
+body.theme-black .score-ring {
+  background: conic-gradient(var(--ring-color) var(--score), #1f2937 0) !important;
+}
+
+body.theme-black .score-ring::after {
+  background: #0b1220 !important;
+}
+
+body.theme-black .score-ring strong {
+  color: #f8fafc !important;
+  text-shadow: 0 1px 12px rgba(15, 23, 42, 0.55);
+}
+
+body.theme-black .score-ring-item span {
+  color: #aab7cc !important;
+}
+
+body.theme-black .radar-grid,
+body.theme-black .radar-axis {
+  stroke: rgba(148, 163, 184, 0.28) !important;
+}
+
+body.theme-black .radar-label {
+  fill: #cbd5e1 !important;
+}
+
+body.theme-black .radar-dot {
+  fill: #020617 !important;
+}
+
+body.theme-black :is(.tag-list span, .focus-list span, .history-tags span, .result-skill-tags span) {
+  color: #dbeafe !important;
+  background: rgba(37, 99, 235, 0.18) !important;
+}
+
+body.theme-black .settings-hero-card,
+body.theme-black .hero-score-card,
+body.theme-black .hero-role-card,
+body.theme-black .upload-preview-card,
+body.theme-black .upload-score-card,
+body.theme-black .selected-role-card,
+body.theme-black .signal-panel {
+  color: #e5edf8 !important;
+  background: rgba(15, 23, 42, 0.88) !important;
+  border-color: rgba(148, 163, 184, 0.22) !important;
+}
+
+body.theme-black .settings-hero-card :is(strong, p),
+body.theme-black .hero-score-card :is(strong, p),
+body.theme-black .hero-role-card strong,
+body.theme-black .upload-preview-card strong,
+body.theme-black .upload-score-card strong,
+body.theme-black .selected-role-card strong,
+body.theme-black .signal-panel strong {
+  color: #f8fafc !important;
+}
+
+body.theme-black .danger-settings-action,
+body.theme-black .history-delete-button,
+body.theme-black .cv-delete-button,
+body.theme-black .avatar-remove-button {
+  color: #fecaca !important;
+  background: rgba(127, 29, 29, 0.32) !important;
+  border-color: rgba(248, 113, 113, 0.22) !important;
+}
+
+body.theme-black .primary-settings-action {
+  color: #ffffff !important;
+  background: #2563eb !important;
+}
+
+body.theme-black .settings-question-count-select {
+  background: linear-gradient(135deg, #020617, #172554) !important;
+  border-color: rgba(148, 163, 184, 0.24) !important;
+}
+
+body.theme-black :is(
+  .dropzone,
+  .upload-progress,
+  .upload-step,
+  .upload-security-note,
+  .upload-cv-row,
+  .upload-empty-cvs,
+  .analysis-metric,
+  .result-block,
+  .interview-prep,
+  .prep-item,
+  .question-progress,
+  .interview-room-footer,
+  .message-list,
+  .message-bubble.ai,
+  .message-bubble.thinking,
+  .chat-composer,
+  .question-text,
+  .completion-summary,
+  .mode-card,
+  .browser-voice-picker,
+  .aws-step,
+  .result-list,
+  .result-recommendation,
+  .admin-stat,
+  .admin-compact-row,
+  .admin-export-card,
+  .admin-empty,
+  .admin-summary-box,
+  .admin-warning,
+  .admin-action-status,
+  .summary-score,
+  .detail-empty-text
+) {
+  color: #e5edf8 !important;
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+body.theme-black :is(
+  .dropzone.dragging,
+  .dropzone.has-file,
+  .upload-cv-row.active,
+  .cv-file.active,
+  .mode-card.active
+) {
+  background:
+    linear-gradient(135deg, rgba(37, 99, 235, 0.18), rgba(16, 185, 129, 0.08)),
+    #0f172a !important;
+  border-color: rgba(96, 165, 250, 0.36) !important;
+}
+
+body.theme-black :is(
+  .dropzone h3,
+  .progress-meta strong,
+  .upload-step strong,
+  .upload-security-note strong,
+  .upload-cv-row strong,
+  .analysis-metric strong,
+  .result-block h4,
+  .prep-copy h4,
+  .prep-item strong,
+  .video-header h2,
+  .question-text,
+  .interviewer-status-card strong,
+  .completion-summary span,
+  .mode-card strong,
+  .browser-voice-picker span,
+  .aws-step strong,
+  .result-list h3,
+  .result-recommendation h3,
+  .admin-stat strong,
+  .admin-compact-row strong,
+  .admin-export-card strong,
+  .admin-empty strong,
+  .summary-score strong,
+  .history-item-meta strong,
+  .timeline-item em,
+  .answer-review-question,
+  .readiness-row strong,
+  .profile-score strong,
+  .admin-denied h1
+) {
+  color: #f8fafc !important;
+}
+
+body.theme-black :is(
+  .dropzone p,
+  .progress-meta,
+  .upload-step p,
+  .upload-security-note p,
+  .upload-cv-row span,
+  .analysis-metric span,
+  .prep-copy p,
+  .prep-item span,
+  .video-header p,
+  .question-progress,
+  .question-progress small,
+  .interviewer-status-card span,
+  .completion-summary p,
+  .mode-card span,
+  .browser-voice-picker small,
+  .aws-step p,
+  .result-list ul,
+  .result-recommendation p,
+  .admin-stat small,
+  .admin-stat em,
+  .admin-compact-row small,
+  .admin-compact-row em,
+  .admin-export-card small,
+  .admin-feedback-form label span,
+  .admin-empty p,
+  .summary-score span,
+  .readiness-row span,
+  .profile-score span,
+  .detail-empty-text,
+  .admin-sync-state
+) {
+  color: #aab7cc !important;
+}
+
+body.theme-black :is(
+  .dropzone-icon,
+  .file-format-list span,
+  .upload-step > span,
+  .upload-cv-icon,
+  .upload-empty-cvs > span,
+  .prep-icon,
+  .file-icon,
+  .history-stat-icon,
+  .history-icon,
+  .timeline-dot,
+  .result-stat > span,
+  .result-context-icon,
+  .result-point-list span,
+  .settings-field-icon,
+  .range-control em,
+  .admin-stat > span,
+  .admin-compact-row > span,
+  .admin-export-card span,
+  .admin-denied > span,
+  .link-icon
+) {
+  color: #93c5fd !important;
+  background: rgba(37, 99, 235, 0.22) !important;
+  border-color: rgba(147, 197, 253, 0.18) !important;
+}
+
+body.theme-black :is(
+  .tag-list span,
+  .focus-list span,
+  .history-tags span,
+  .result-skill-tags span,
+  .upload-cv-row em,
+  .cv-file em,
+  .chat-header-actions span,
+  .answer-review-heading span,
+  .status-pill.completed,
+  .status-pill.review,
+  .save-status,
+  .sync-status
+) {
+  color: #e0f2fe !important;
+  background: rgba(37, 99, 235, 0.32) !important;
+  border: 1px solid rgba(147, 197, 253, 0.22) !important;
+}
+
+body.theme-black :is(
+  .result-answer-heading strong.excellent,
+  .result-answer-heading strong.good,
+  .result-answer-heading strong.practice
+) {
+  color: #f8fafc !important;
+  background: rgba(37, 99, 235, 0.28) !important;
+  border: 1px solid rgba(147, 197, 253, 0.22) !important;
+}
+
+body.theme-black :is(
+  .secondary-upload-action,
+  .new-question-set-button,
+  .secondary-result-action,
+  .history-empty .secondary-history-action,
+  .chat-size-button
+) {
+  color: #dbeafe !important;
+  background: #111827 !important;
+  border: 1px solid rgba(148, 163, 184, 0.2) !important;
+}
+
+body.theme-black :is(
+  .secondary-upload-action:hover,
+  .new-question-set-button:hover,
+  .secondary-result-action:hover,
+  .chat-size-button:hover
+) {
+  color: #ffffff !important;
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+body.theme-black :is(
+  .delete-upload-cv-button,
+  .history-delete-button,
+  .cv-delete-button,
+  .avatar-remove-button
+) {
+  color: #fecaca !important;
+  background: rgba(127, 29, 29, 0.32) !important;
+  border-color: rgba(248, 113, 113, 0.22) !important;
+}
+
+body.theme-black :is(
+  .delete-upload-cv-button:hover,
+  .history-delete-button:hover,
+  .cv-delete-button:hover,
+  .avatar-remove-button:hover
+) {
+  color: #ffffff !important;
+  background: #dc2626 !important;
+  border-color: #dc2626 !important;
+}
+
+body.theme-black :is(.upload-error, .interview-error) {
+  color: #fecaca !important;
+  background: rgba(127, 29, 29, 0.28) !important;
+  border-color: rgba(248, 113, 113, 0.24) !important;
+}
+
+body.theme-black :is(.admin-table th, .table-head, .table-head span:first-child) {
+  color: #94a3b8 !important;
+}
+
+body.theme-black .admin-table td {
+  color: #cbd5e1 !important;
+  background: #111827 !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+body.theme-black .admin-table td:first-child {
+  color: #f8fafc !important;
+}
+
+body.theme-black .message-bubble.user {
+  color: #ffffff !important;
+  background: #2563eb !important;
+}
+
+body.theme-black .message-bubble.thinking {
+  color: #bfdbfe !important;
+}

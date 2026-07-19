@@ -1,15 +1,31 @@
+import { authFetch } from './apiClient.js'
+import { createInterviewSession } from './interviewService.js'
+import { normalizeLanguage } from './language.js'
+
 const DEFAULT_INTERVIEW_API_BASE_URL =
   'https://j3zljogo3j.execute-api.ap-southeast-1.amazonaws.com/default'
 
 const INTERVIEW_API_BASE_URL = import.meta.env.VITE_INTERVIEW_API_BASE_URL || DEFAULT_INTERVIEW_API_BASE_URL
 
-export async function createInterviewOnAws({ cvAnalysis, currentUser }) {
+export async function createInterviewOnAws({ cvAnalysis, currentUser, roleProfile, questionCount, language }) {
+  if (!cvAnalysis?.cvId) {
+    throw new Error('Please upload and analyze a CV before creating an interview.')
+  }
+
+  const roleSkills = roleProfile?.skills?.filter(Boolean) || []
+  const cvSkills = cvAnalysis.skills || []
+  const skills = mergeUnique(roleSkills, cvSkills)
+
   const response = await callInterviewApi('/interviews', {
     userId: currentUser.userId,
-    cvId: cvAnalysis?.cvId || 'cv_demo_001',
-    role: cvAnalysis?.suggestedPosition || 'Software Developer Intern',
-    skills: cvAnalysis?.skills || ['React', 'Python', 'AWS'],
-    projects: cvAnalysis?.projects || ['Talent Graph AI'],
+    cvId: cvAnalysis.cvId,
+    role: roleProfile?.label || cvAnalysis.suggestedPosition || 'Software Developer Intern',
+    roleCategory: roleProfile?.category || 'cv',
+    roleFocus: roleProfile?.focus || '',
+    questionCount,
+    language,
+    skills,
+    projects: cvAnalysis.projects || [],
   })
 
   const interview = response.interview || response
@@ -18,13 +34,32 @@ export async function createInterviewOnAws({ cvAnalysis, currentUser }) {
     throw new Error('Create interview API did not return a valid interview session.')
   }
 
+  const activeLanguage = normalizeLanguage(language)
+  const localSession = createInterviewSession(cvAnalysis, {
+    roleProfile,
+    questionCount,
+    language: activeLanguage,
+  })
+  const apiQuestions = limitQuestions(
+    normalizeInterviewQuestions(interview.questions || []),
+    questionCount,
+  )
+  const questions = shouldUseLocalQuestions(apiQuestions, activeLanguage)
+    ? localSession.questions
+    : apiQuestions
+
   return {
     interviewId: interview.interviewId,
     role: interview.role,
-    focus: interview.skills?.slice(0, 3).join(', ') || 'AWS AI Interview',
-    questions: normalizeInterviewQuestions(interview.questions || []),
+    focus: interview.roleFocus || interview.skills?.slice(0, 3).join(', ') || 'AWS AI Interview',
+    roleKey: roleProfile?.id || 'cv-role',
+    roleCategory: interview.roleCategory || roleProfile?.category || 'cv',
+    skills: interview.skills || skills,
+    questions,
+    questionCount: questions.length,
     createdAt: interview.createdAt,
     status: interview.status || 'IN_PROGRESS',
+    language: activeLanguage,
     source: 'AWS',
   }
 }
@@ -35,6 +70,7 @@ export async function submitAnswerToAws({
   questionIndex,
   question,
   answer,
+  language,
 }) {
   const response = await callInterviewApi('/interviews/answer', {
     userId,
@@ -42,6 +78,7 @@ export async function submitAnswerToAws({
     questionIndex,
     question,
     answer,
+    language,
   })
 
   const evaluation = response.evaluation || {}
@@ -67,7 +104,7 @@ async function callInterviewApi(path, body) {
   let response
 
   try {
-    response = await fetch(`${INTERVIEW_API_BASE_URL}${path}`, {
+    response = await authFetch(`${INTERVIEW_API_BASE_URL}${path}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -112,6 +149,35 @@ function normalizeInterviewQuestions(questions) {
     .filter(Boolean)
 }
 
+function limitQuestions(questions, questionCount) {
+  const requestedCount = Number(questionCount)
+
+  if (!Number.isFinite(requestedCount) || requestedCount <= 0) {
+    return questions
+  }
+
+  return questions.slice(0, Math.max(2, Math.round(requestedCount)))
+}
+
+function mergeUnique(...groups) {
+  const seen = new Set()
+  const merged = []
+
+  groups.flat().forEach((item) => {
+    const value = String(item || '').trim()
+    const key = value.toLowerCase()
+
+    if (!value || seen.has(key)) {
+      return
+    }
+
+    seen.add(key)
+    merged.push(value)
+  })
+
+  return merged
+}
+
 function normalizeInterviewQuestion(question) {
   const text = String(question).trim()
   const githubProject = text.match(/github\.com\/[^/\s]+\/([^.\s/?#]+)/i)
@@ -136,6 +202,34 @@ function normalizeInterviewQuestion(question) {
   }
 
   return normalizedText
+}
+
+function shouldUseLocalQuestions(questions, language) {
+  if (language !== 'vi') {
+    return false
+  }
+
+  if (!questions.length) {
+    return true
+  }
+
+  const englishQuestionCount = questions.filter((question) => looksLikeEnglishQuestion(question)).length
+
+  return englishQuestionCount >= Math.ceil(questions.length / 2)
+}
+
+function looksLikeEnglishQuestion(question) {
+  const text = String(question || '').trim()
+
+  if (!text) {
+    return false
+  }
+
+  if (/[ăâđêôơưáàảãạấầẩẫậắằẳẵặéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(text)) {
+    return false
+  }
+
+  return /\b(how would|tell me|describe|explain|what|why|if|can you|you are applying|give me|pick one)\b/i.test(text)
 }
 
 function isFrontendSkill(skill) {

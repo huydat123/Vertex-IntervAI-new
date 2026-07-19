@@ -1,3 +1,5 @@
+import { authFetch } from './apiClient.js'
+
 const DEFAULT_UPLOAD_CV_API_URL =
   'https://j3zljogo3j.execute-api.ap-southeast-1.amazonaws.com/default/upload_cv'
 const DEFAULT_ANALYZE_CV_API_URL =
@@ -13,7 +15,7 @@ export async function uploadCvToAws(file, userId = DEMO_USER_ID) {
   let response
 
   try {
-    response = await fetch(UPLOAD_CV_API_URL, {
+    response = await authFetch(UPLOAD_CV_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -55,7 +57,7 @@ export async function analyzeCvOnAws(uploadedCv, userId = DEMO_USER_ID) {
   let response
 
   try {
-    response = await fetch(ANALYZE_CV_API_URL, {
+    response = await authFetch(ANALYZE_CV_API_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

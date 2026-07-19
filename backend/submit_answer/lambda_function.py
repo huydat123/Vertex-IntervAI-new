@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import unicodedata
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -39,6 +40,58 @@ def get_http_method(event):
     )
 
 
+def get_authorizer_claims(event):
+    authorizer = event.get("requestContext", {}).get("authorizer") or {}
+    return (
+        authorizer.get("jwt", {}).get("claims")
+        or authorizer.get("claims")
+        or {}
+    )
+
+def get_request_identity(event):
+    claims = get_authorizer_claims(event)
+    groups = parse_groups(claims.get("cognito:groups"))
+    role = clean_identity_string(claims.get("custom:role")) or ("admin" if "admin" in groups else "user")
+    user_id = clean_identity_string(
+        claims.get("sub")
+        or claims.get("username")
+        or claims.get("cognito:username")
+    )
+
+    return {
+        "userId": user_id,
+        "role": role,
+        "isAdmin": role == "admin" or "admin" in groups,
+        "isAuthenticated": bool(user_id),
+    }
+
+def resolve_user_id(event, requested_user_id=None):
+    identity = get_request_identity(event)
+    requested = clean_identity_string(requested_user_id) or DEFAULT_USER_ID
+
+    if identity["isAuthenticated"]:
+        if identity["isAdmin"] and requested:
+            return requested
+        return identity["userId"]
+
+    return requested
+
+def parse_groups(value):
+    if isinstance(value, list):
+        return [str(item).lower() for item in value]
+
+    if isinstance(value, str):
+        return [item.strip().lower() for item in value.split(",") if item.strip()]
+
+    return []
+
+def clean_identity_string(value):
+    return value.strip() if isinstance(value, str) else ""
+
+def normalize_language(value):
+    normalized = str(value or "").strip().lower()
+    return "vi" if normalized in {"vi", "vi-vn", "vietnamese", "tieng viet", "tiếng việt"} else "en"
+
 def lambda_handler(event, context):
     try:
         method = get_http_method(event)
@@ -50,7 +103,7 @@ def lambda_handler(event, context):
             return response(405, {"message": "Method not allowed"})
 
         body = json.loads(event.get("body") or "{}")
-        user_id = safe_string(body.get("userId"), DEFAULT_USER_ID)
+        user_id = safe_string(resolve_user_id(event, body.get("userId")), DEFAULT_USER_ID)
         interview_id = safe_string(body.get("interviewId"), "")
         answer = safe_string(body.get("answer"), "")
 
@@ -78,12 +131,14 @@ def lambda_handler(event, context):
             return response(400, {"message": "questionIndex is invalid"})
 
         question = safe_string(body.get("question"), questions[question_index])
-        evaluation = evaluate_answer(question, answer, interview)
+        language = normalize_language(body.get("language") or interview.get("language"))
+        evaluation = evaluate_answer(question, answer, interview, language)
         now = datetime.now(timezone.utc).isoformat()
         answer_record = {
             "questionIndex": question_index,
             "question": question,
             "answer": answer,
+            "language": language,
             "score": int(evaluation["score"]),
             "level": evaluation.get("level", "needs-detail"),
             "feedback": evaluation["feedback"],
@@ -125,11 +180,11 @@ def lambda_handler(event, context):
         )
 
 
-def evaluate_answer(question, answer, interview):
-    local_evaluation = evaluate_answer_locally(question, answer)
+def evaluate_answer(question, answer, interview, language="en"):
+    local_evaluation = evaluate_answer_locally(question, answer, language)
 
     try:
-        bedrock_evaluation = evaluate_answer_with_bedrock(question, answer, interview)
+        bedrock_evaluation = evaluate_answer_with_bedrock(question, answer, interview, language)
         normalized = normalize_evaluation(bedrock_evaluation)
     except Exception as error:
         print("Bedrock interview evaluation unavailable, using fallback:", str(error))
@@ -145,8 +200,8 @@ def evaluate_answer(question, answer, interview):
     return normalized
 
 
-def evaluate_answer_with_bedrock(question, answer, interview):
-    prompt = build_evaluation_prompt(question, answer, interview)
+def evaluate_answer_with_bedrock(question, answer, interview, language="en"):
+    prompt = build_evaluation_prompt(question, answer, interview, language)
     model_ids = unique_model_ids([BEDROCK_MODEL_ID, "apac.amazon.nova-lite-v1:0"])
     last_error = None
 
@@ -198,7 +253,8 @@ def evaluate_answer_with_bedrock(question, answer, interview):
     raise last_error
 
 
-def evaluate_answer_locally(question, answer):
+def evaluate_answer_locally(question, answer, language="en"):
+    is_vietnamese = normalize_language(language) == "vi"
     normalized_answer = normalize_text(answer)
     word_count = len(normalized_answer.split())
 
@@ -208,9 +264,15 @@ def evaluate_answer_locally(question, answer):
             28,
             "off-topic",
             False,
-            "Your answer looks like copied AI feedback, not your own answer to the current interview question.",
+            "Câu trả lời giống như bạn copy feedback AI trước đó, chưa phải câu trả lời của bạn cho câu hỏi hiện tại."
+            if is_vietnamese
+            else "Your answer looks like copied AI feedback, not your own answer to the current interview question.",
             [],
-            ["Answer the current question directly instead of reusing feedback from the previous answer."],
+            [
+                "Hãy trả lời trực tiếp câu hỏi hiện tại, không dùng lại feedback của câu trước."
+                if is_vietnamese
+                else "Answer the current question directly instead of reusing feedback from the previous answer."
+            ],
         )
 
     if says_unknown(normalized_answer):
@@ -218,9 +280,13 @@ def evaluate_answer_locally(question, answer):
             25,
             "weak",
             False,
-            "You said you do not know the answer.",
+            "Bạn nói rằng mình chưa biết câu trả lời." if is_vietnamese else "You said you do not know the answer.",
             [],
-            ["Try to explain what you know and connect it to one project or technology."],
+            [
+                "Hãy giải thích phần bạn biết và liên hệ với một dự án hoặc công nghệ cụ thể."
+                if is_vietnamese
+                else "Try to explain what you know and connect it to one project or technology."
+            ],
         )
 
     if word_count < 12:
@@ -228,9 +294,15 @@ def evaluate_answer_locally(question, answer):
             42,
             "incomplete",
             False,
-            "Your answer is too short for an interview response.",
+            "Câu trả lời còn quá ngắn cho một buổi phỏng vấn."
+            if is_vietnamese
+            else "Your answer is too short for an interview response.",
             [],
-            ["Add one project example, one technical detail, and one result."],
+            [
+                "Hãy thêm một ví dụ dự án, một chi tiết kỹ thuật và một kết quả."
+                if is_vietnamese
+                else "Add one project example, one technical detail, and one result."
+            ],
         )
 
     relevance_issue = evaluate_question_relevance(question, answer)
@@ -241,12 +313,25 @@ def evaluate_answer_locally(question, answer):
             False,
             relevance_issue["reason"],
             [],
-            ["Answer the exact question, then support it with a project example."],
+            [
+                "Hãy trả lời đúng trọng tâm câu hỏi, sau đó chứng minh bằng một ví dụ dự án."
+                if is_vietnamese
+                else "Answer the exact question, then support it with a project example."
+            ],
         )
 
-    has_example = bool(re.search(r"\b(project|built|created|developed|implemented|used|designed|debugged|improved|connected|deployed|handled|worked on)\b", normalized_answer))
-    has_technical_detail = bool(re.search(r"\b(react|javascript|typescript|python|java|spring|html|css|api|database|sql|mysql|dynamodb|lambda|s3|aws|bedrock|frontend|backend|component|state|serverless|authentication)\b", normalized_answer))
-    has_result = bool(re.search(r"\b(result|improve|reduced|faster|user|performance|reliable|error|bug|learned|because|therefore|so that|impact|\d+)\b", normalized_answer))
+    has_example = bool(re.search(
+        r"\b(project|du an|built|created|developed|implemented|used|designed|debugged|improved|connected|deployed|handled|worked on|xay|xay dung|phat trien|trien khai|su dung|thiet ke|ket noi|xu ly|lam)\b",
+        normalized_answer,
+    ))
+    has_technical_detail = bool(re.search(
+        r"\b(react|javascript|typescript|python|java|spring|html|css|api|database|sql|mysql|dynamodb|lambda|s3|aws|bedrock|frontend|backend|component|state|serverless|authentication|xac thuc|giao dien|co so du lieu|kiem thu|logging|validation)\b",
+        normalized_answer,
+    ))
+    has_result = bool(re.search(
+        r"\b(result|ket qua|improve|cai thien|reduced|faster|nhanh|user|nguoi dung|performance|hieu nang|reliable|tin cay|error|loi|bug|learned|hoc|because|vi|therefore|so that|impact|anh huong|\d+)\b",
+        normalized_answer,
+    ))
 
     score = 58
     strengths = []
@@ -254,21 +339,45 @@ def evaluate_answer_locally(question, answer):
 
     if has_technical_detail:
         score += 14
-        strengths.append("You included relevant technical detail.")
+        strengths.append(
+            "Bạn đã nêu chi tiết kỹ thuật liên quan."
+            if is_vietnamese
+            else "You included relevant technical detail."
+        )
     else:
-        improvements.append("Add specific technologies, tools, or concepts.")
+        improvements.append(
+            "Hãy thêm công nghệ, công cụ hoặc khái niệm cụ thể."
+            if is_vietnamese
+            else "Add specific technologies, tools, or concepts."
+        )
 
     if has_example:
         score += 14
-        strengths.append("You connected the answer to practical work.")
+        strengths.append(
+            "Bạn đã liên hệ câu trả lời với công việc hoặc dự án thực tế."
+            if is_vietnamese
+            else "You connected the answer to practical work."
+        )
     else:
-        improvements.append("Add one concrete project example.")
+        improvements.append(
+            "Hãy thêm một ví dụ dự án cụ thể."
+            if is_vietnamese
+            else "Add one concrete project example."
+        )
 
     if has_result:
         score += 10
-        strengths.append("You explained impact, reasoning, or a result.")
+        strengths.append(
+            "Bạn đã giải thích kết quả, tác động hoặc lý do."
+            if is_vietnamese
+            else "You explained impact, reasoning, or a result."
+        )
     else:
-        improvements.append("Mention one result, tradeoff, bug, or lesson learned.")
+        improvements.append(
+            "Hãy nêu một kết quả, tradeoff, bug hoặc bài học rút ra."
+            if is_vietnamese
+            else "Mention one result, tradeoff, bug, or lesson learned."
+        )
 
     if word_count >= 45:
         score += 6
@@ -280,67 +389,103 @@ def evaluate_answer_locally(question, answer):
         score,
         level,
         score >= 60,
-        f"Answer reviewed for question: {question}. Score: {score}/100.",
+        f"Đã chấm câu trả lời cho câu hỏi: {question}. Điểm: {score}/100."
+        if is_vietnamese
+        else f"Answer reviewed for question: {question}. Score: {score}/100.",
         strengths,
-        improvements or ["Add a measurable result to make the answer sharper."],
+        improvements or [
+            "Hãy thêm một kết quả đo được để câu trả lời sắc hơn."
+            if is_vietnamese
+            else "Add a measurable result to make the answer sharper."
+        ],
     )
 
 
 def evaluate_question_relevance(question, answer):
     normalized_question = normalize_text(question)
     normalized_answer = normalize_text(answer)
+    is_vietnamese_question = includes_any(normalized_question, ["du an", "ban se", "hay", "cau hoi", "phong van", "ky nang"])
 
     if is_project_question(normalized_question):
         project = extract_project_name(question)
         mentions_project = normalize_text(project) in normalized_answer if project else False
-        has_project_context = includes_any(normalized_answer, ["project", "website", "application", "app", "system", "page", "feature"])
+        has_project_context = includes_any(normalized_answer, ["project", "du an", "website", "application", "ung dung", "app", "system", "he thong", "page", "trang", "feature", "tinh nang"])
         has_responsibility = includes_any(
             normalized_answer,
             [
                 "my responsibility",
+                "trach nhiem",
+                "vai tro",
                 "i built",
+                "em xay",
+                "toi xay",
                 "i created",
                 "i developed",
+                "phat trien",
                 "i implemented",
+                "trien khai",
                 "i worked",
+                "lam",
                 "i designed",
+                "thiet ke",
                 "i used",
+                "su dung",
                 "i connected",
+                "ket noi",
                 "i tested",
+                "kiem thu",
                 "i improved",
+                "cai thien",
                 "i handled",
+                "xu ly",
             ],
         )
 
         if not mentions_project and (not has_project_context or not has_responsibility):
             return {
                 "score": 38,
-                "reason": "Your answer is not focused on the project question. Explain the project, your responsibility, what you built, and the result.",
+                "reason": (
+                    "Câu trả lời chưa tập trung vào câu hỏi về dự án. Hãy giải thích dự án, trách nhiệm của bạn, phần bạn xây dựng và kết quả."
+                    if is_vietnamese_question
+                    else "Your answer is not focused on the project question. Explain the project, your responsibility, what you built, and the result."
+                ),
             }
 
-    if "reliability" in normalized_question or "responsive" in normalized_question:
-        if not includes_any(normalized_answer, ["responsive", "reliability", "reliable", "accessibility", "browser", "loading", "error", "empty", "state", "validation", "test", "layout", "component"]):
+    if "reliability" in normalized_question or "do tin cay" in normalized_question or "responsive" in normalized_question or "bao tri" in normalized_question:
+        if not includes_any(normalized_answer, ["responsive", "reliability", "reliable", "do tin cay", "tin cay", "accessibility", "truy cap", "browser", "trinh duyet", "loading", "error", "loi", "empty", "rong", "state", "trang thai", "validation", "kiem tra", "test", "layout", "component"]):
             return {
                 "score": 42,
-                "reason": "Your answer does not address reliability, responsiveness, user experience, testing, or error handling.",
+                "reason": (
+                    "Câu trả lời chưa nói đến độ tin cậy, responsive, trải nghiệm người dùng, kiểm thử hoặc xử lý lỗi."
+                    if is_vietnamese_question
+                    else "Your answer does not address reliability, responsiveness, user experience, testing, or error handling."
+                ),
             }
 
-    if "debug" in normalized_question or "bug" in normalized_question:
-        if not includes_any(normalized_answer, ["reproduce", "log", "console", "debug", "root cause", "fix", "test", "verify", "error"]):
+    if "debug" in normalized_question or "bug" in normalized_question or "loi" in normalized_question:
+        if not includes_any(normalized_answer, ["reproduce", "tai hien", "log", "console", "debug", "root cause", "nguyen nhan", "fix", "sua", "test", "verify", "xac minh", "error", "loi"]):
             return {
                 "score": 42,
-                "reason": "Your answer does not describe a debugging process or how you found and verified the fix.",
+                "reason": (
+                    "Câu trả lời chưa mô tả quy trình debug hoặc cách bạn tìm nguyên nhân và xác minh bản sửa."
+                    if is_vietnamese_question
+                    else "Your answer does not describe a debugging process or how you found and verified the fix."
+                ),
             }
 
     skill = extract_skill(question)
     if skill:
         mentions_skill = normalize_text(skill) in normalized_answer
-        has_work_example = includes_any(normalized_answer, ["project", "feature", "built", "developed", "implemented", "used", "designed", "connected", "tested", "improved"])
+        has_work_example = includes_any(normalized_answer, ["project", "du an", "feature", "tinh nang", "built", "xay", "developed", "phat trien", "implemented", "trien khai", "used", "su dung", "designed", "thiet ke", "connected", "ket noi", "tested", "kiem thu", "improved", "cai thien"])
 
         if not mentions_skill and not has_work_example:
             return {
                 "score": 44,
-                "reason": f"Your answer does not connect back to {skill} or to a concrete project example.",
+                "reason": (
+                    f"Câu trả lời chưa liên hệ lại với {skill} hoặc một ví dụ dự án cụ thể."
+                    if is_vietnamese_question
+                    else f"Your answer does not connect back to {skill} or to a concrete project example."
+                ),
             }
 
     return None
@@ -364,6 +509,7 @@ def update_interview(interview, answer_record, now):
     interview["answerAttempts"] = attempts
 
     answers = list(interview.get("answers") or [])
+    interview["language"] = answer_record.get("language") or interview.get("language", "en")
 
     if answer_record["shouldAdvance"]:
         answers = upsert_answer(answers, answer_record)
@@ -435,10 +581,39 @@ def normalize_evaluation(raw):
     }
 
 
-def build_evaluation_prompt(question, answer, interview):
+def build_evaluation_prompt(question, answer, interview, language="en"):
     role = interview.get("role", "Software Developer Intern")
     skills = ", ".join(interview.get("skills") or [])
     projects = ", ".join(interview.get("projects") or [])
+
+    if normalize_language(language) == "vi":
+        return f"""
+Bạn là AI interviewer cho buổi phỏng vấn junior software developer.
+Hãy chấm câu trả lời của ứng viên thật nghiêm túc.
+
+Quy tắc:
+- Chỉ chấm câu trả lời cho câu hỏi hiện tại.
+- Nếu câu trả lời copy feedback AI trước đó, lạc đề, hoặc không trả lời câu hỏi, điểm phải dưới 45 và shouldAdvance phải là false.
+- Nếu ứng viên nói "không biết", "không", hoặc trả lời quá ngắn, điểm phải dưới 45 và shouldAdvance phải là false.
+- Feedback, strengths, improvements phải viết bằng tiếng Việt tự nhiên.
+- Return ONLY valid JSON. Do not use markdown.
+
+Return JSON with this shape:
+{{
+  "score": 0,
+  "level": "strong",
+  "shouldAdvance": true,
+  "feedback": "feedback ngắn bằng tiếng Việt",
+  "strengths": ["điểm mạnh 1"],
+  "improvements": ["điểm cần cải thiện 1"]
+}}
+
+Role: {role}
+CV skills: {skills}
+CV projects: {projects}
+Question: {question}
+Candidate answer: {answer}
+"""
 
     return f"""
 You are an AI interviewer for a junior software developer interview.
@@ -513,6 +688,11 @@ def is_copied_ai_feedback(value):
         r"\banswer reviewed for question\b",
         r"\bmention one hard part\b",
         r"\bscore\s+\d+\s+100\b",
+        r"\bcau tra loi goi y\b",
+        r"\bcau hoi tiep theo\b",
+        r"\bcan cai thien\b",
+        r"\bde manh hon\b",
+        r"\bdiem\s+\d+\s+100\b",
     ]
     return any(re.search(pattern, value) for pattern in patterns)
 
@@ -526,22 +706,32 @@ def is_project_question(question):
             "one project",
             "what problem did it solve",
             "what part did you build",
+            "du an",
+            "giai quyet van de",
+            "phan nao",
+            "ban da xay",
+            "kien truc",
         ]
     )
 
 
 def extract_skill(question):
+    searchable_question = strip_accents(question)
     patterns = [
         r"mentions\s+(.+?)\.",
         r"mentions\s+(.+?)\?",
+        r"nhac den\s+(.+?)\.",
+        r"nhac den\s+(.+?)\?",
         r"with\s+(.+?)\?",
         r"uses\s+(.+?)\?",
         r"built with\s+(.+?)\?",
         r"related to\s+(.+?)\?",
+        r"dung\s+(.+?)\s+(responsive|de|nhu)",
+        r"lien quan den\s+(.+?)\?",
     ]
 
     for pattern in patterns:
-        match = re.search(pattern, question, re.IGNORECASE)
+        match = re.search(pattern, searchable_question, re.IGNORECASE)
         if match:
             return clean_extracted_text(match.group(1))
 
@@ -549,15 +739,21 @@ def extract_skill(question):
 
 
 def extract_project_name(question):
+    searchable_question = strip_accents(question)
     github_match = re.search(r"github\.com/[^/\s]+/([^.\s/?#]+)", question, re.IGNORECASE)
 
     if github_match:
         return format_project_name(github_match.group(1))
 
-    about_match = re.search(r"tell me about\s+(.+?)\.", question, re.IGNORECASE)
+    about_match = re.search(r"tell me about\s+(.+?)\.", searchable_question, re.IGNORECASE)
 
     if about_match:
         return clean_extracted_text(about_match.group(1))
+
+    vietnamese_match = re.search(r"du an\s+(.+?)\.", searchable_question, re.IGNORECASE)
+
+    if vietnamese_match:
+        return clean_extracted_text(vietnamese_match.group(1))
 
     return ""
 
@@ -575,7 +771,12 @@ def includes_any(value, terms):
 
 
 def normalize_text(value):
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s']", " ", str(value).lower())).strip()
+    ascii_value = strip_accents(value).lower()
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9\s']", " ", ascii_value)).strip()
+
+def strip_accents(value):
+    normalized = unicodedata.normalize("NFD", str(value))
+    return "".join(character for character in normalized if unicodedata.category(character) != "Mn")
 
 
 def level_from_score(score):

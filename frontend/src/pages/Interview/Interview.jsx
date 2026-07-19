@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
+import PreferenceControls from '../../components/PreferenceControls.jsx'
 import {
   askMockAi,
   createInitialMessages,
   createInterviewSession,
   enhanceInterviewFeedback,
+  getBrowserSpeechVoices,
+  playOnlineVietnameseSpeech,
   speakText,
   stopSpeaking,
 } from '../../services/interviewService.js'
 import { createInterviewOnAws, submitAnswerToAws } from '../../services/interviewApi.js'
 import { createInterviewResult, saveInterviewResult } from '../../services/interviewStorage.js'
+import { getAppCopy } from '../../services/i18n.js'
+import { getLanguageConfig, normalizeLanguage } from '../../services/language.js'
+import { loadSettings, saveSettings } from '../../services/settingsStorage.js'
 import {
   getPreferredRecordingMimeType,
   synthesizeQuestionAudio,
@@ -24,11 +30,433 @@ const navItems = [
   { id: 'history', label: 'History', icon: 'history' },
 ]
 
+const interviewCopy = {
+  en: {
+    noCvEyebrow: 'No CV for this account',
+    noCvTitle: 'Upload a CV before starting AI Interview',
+    noCvText: 'This account does not have a saved CV analysis yet. Upload and analyze a CV first so the interview questions, score, and feedback belong to this user.',
+    uploadCv: 'Upload CV',
+    backDashboard: 'Back to Dashboard',
+    pageTitle: 'AI Interview',
+    setupRequired: 'Interview setup required',
+    interviewRole: 'Interview Role',
+    roleTitle: 'Choose the role focus for this AI interview',
+    roleText: 'Pick an AI, data, cloud, frontend, or backend role. The question set will reset and follow the selected role while still using skills from your uploaded CV. Choose at least two questions for each interview round.',
+    selectedRole: 'Selected role',
+    searchRole: 'Search role...',
+    questions: 'Questions',
+    backToCvRole: 'Back to CV Role',
+    noRole: 'No role matched your search.',
+    cameraOnline: 'Camera online',
+    cameraStandby: 'Camera standby',
+    interviewRoom: 'Interview Room',
+    cameraOff: 'Camera is off',
+    cameraHidden: 'Camera preview is hidden for this session.',
+    aiInterviewer: 'AI Interviewer',
+    userLabel: 'You',
+    conversation: 'Conversation',
+    transcribeProcessing: ' - Amazon Transcribe is processing audio',
+    answered: 'answered',
+    compact: 'Compact',
+    expand: 'Expand',
+    aiPreparing: 'AI is preparing feedback...',
+    completedPlaceholder: 'Interview completed.',
+    answerPlaceholder: 'Type your answer here...',
+    send: 'Send',
+    currentQuestion: 'Current Question',
+    question: 'Question',
+    newInterview: 'New Interview',
+    newSet: 'New Set',
+    voiceAnswer: 'Voice Answer',
+    voiceAnswerText: 'Microphone capture with transcript review.',
+    chatAnswer: 'Chat Answer',
+    chatAnswerText: 'Written response with AI review.',
+    awsVoice: 'AWS Voice Integration',
+    awsVoiceText: 'Voice and evaluation services for this interview session.',
+    browserVoiceLabel: 'Question voice',
+    autoVoice: 'Auto voice',
+    onlineVietnameseVoice: 'Online Vietnamese voice',
+    noVoiceAvailable: 'No browser voices available',
+    missingVietnameseVoice: 'No Vietnamese browser voice was found. Choose another voice manually or install a Vietnamese speech voice in Windows/Chrome.',
+    finalScore: 'Final interview score',
+    score: 'Score',
+    strengths: 'Strengths',
+    improvements: 'Needs Improvement',
+    recommendation: 'AI Recommendation',
+    fullResult: 'View Full Result',
+    recording: 'Recording',
+    statusReviewing: 'Reviewing your answer...',
+    statusListening: 'Listening to your voice answer...',
+    statusTranscribing: 'Transcribing your answer with AWS...',
+    statusSpeaking: 'Preparing question voice...',
+    statusReady: 'Ready for your response',
+    stateCompleted: 'Completed',
+    stateAiReviewing: 'AI reviewing',
+    stateRecording: 'Recording',
+    stateTranscribing: 'Transcribing',
+    stateSpeaking: 'Speaking',
+    stateProgress: 'In progress',
+    pollyCreating: 'Creating question audio with Amazon Polly...',
+    pollyPlaying: 'Playing question with Amazon Polly',
+    browserVoice: 'Using browser voice',
+    transcribeSending: 'Sending your answer to Amazon Transcribe...',
+    transcribeDone: 'Amazon Transcribe completed. Review the text, then press Send.',
+    recordingVoice: 'Recording your voice answer...',
+    micUnsupported: 'Microphone recording is not supported in this browser.',
+    micBlocked: 'Microphone permission was blocked or no microphone was found.',
+    noAudio: 'No audio was recorded. Please try again.',
+    cameraUnsupported: 'Camera access is not supported in this browser.',
+    cameraBlocked: 'Camera permission was blocked or no camera was found.',
+  },
+  vi: {
+    noCvEyebrow: 'Chưa có CV cho tài khoản này',
+    noCvTitle: 'Hãy upload CV trước khi bắt đầu AI Interview',
+    noCvText: 'Tài khoản này chưa có bản phân tích CV đã lưu. Hãy upload và phân tích CV trước để câu hỏi, điểm và feedback thuộc đúng người dùng.',
+    uploadCv: 'Upload CV',
+    backDashboard: 'Về Dashboard',
+    pageTitle: 'Phỏng vấn AI',
+    setupRequired: 'Cần chuẩn bị phỏng vấn',
+    interviewRole: 'Vai trò phỏng vấn',
+    roleTitle: 'Chọn trọng tâm role cho buổi phỏng vấn AI',
+    roleText: 'Chọn role AI, data, cloud, frontend hoặc backend. Bộ câu hỏi sẽ reset theo role đã chọn nhưng vẫn dùng kỹ năng từ CV của bạn. Mỗi vòng cần ít nhất hai câu hỏi.',
+    selectedRole: 'Role đã chọn',
+    searchRole: 'Tìm role...',
+    questions: 'Câu hỏi',
+    backToCvRole: 'Về role từ CV',
+    noRole: 'Không có role phù hợp.',
+    cameraOnline: 'Camera đang bật',
+    cameraStandby: 'Camera chờ',
+    interviewRoom: 'Phòng phỏng vấn',
+    cameraOff: 'Camera đang tắt',
+    cameraHidden: 'Phần xem trước camera đang ẩn trong phiên này.',
+    aiInterviewer: 'AI Interviewer',
+    userLabel: 'Bạn',
+    conversation: 'Hội thoại',
+    transcribeProcessing: ' - Amazon Transcribe đang xử lý audio',
+    answered: 'đã trả lời',
+    compact: 'Thu gọn',
+    expand: 'Phóng to',
+    aiPreparing: 'AI đang chuẩn bị feedback...',
+    completedPlaceholder: 'Phỏng vấn đã hoàn tất.',
+    answerPlaceholder: 'Nhập câu trả lời tại đây...',
+    send: 'Gửi',
+    currentQuestion: 'Câu hỏi hiện tại',
+    question: 'Câu hỏi',
+    newInterview: 'Phỏng vấn mới',
+    newSet: 'Bộ câu hỏi mới',
+    voiceAnswer: 'Trả lời bằng giọng nói',
+    voiceAnswerText: 'Ghi âm mic và xem lại transcript.',
+    chatAnswer: 'Trả lời bằng chat',
+    chatAnswerText: 'Nhập câu trả lời và nhận AI review.',
+    awsVoice: 'Tích hợp voice',
+    awsVoiceText: 'Dịch vụ voice, transcript và đánh giá cho phiên phỏng vấn.',
+    browserVoiceLabel: 'Giọng đọc câu hỏi',
+    autoVoice: 'Tự động chọn giọng',
+    onlineVietnameseVoice: 'Giọng tiếng Việt online',
+    noVoiceAvailable: 'Không có voice trong trình duyệt',
+    missingVietnameseVoice: 'Không tìm thấy giọng tiếng Việt trong trình duyệt. Hãy chọn voice khác thủ công hoặc cài giọng tiếng Việt trong Windows/Chrome.',
+    finalScore: 'Điểm phỏng vấn cuối',
+    score: 'Điểm',
+    strengths: 'Điểm mạnh',
+    improvements: 'Cần cải thiện',
+    recommendation: 'Gợi ý của AI',
+    fullResult: 'Xem kết quả đầy đủ',
+    recording: 'Đang ghi âm',
+    statusReviewing: 'Đang chấm câu trả lời...',
+    statusListening: 'Đang nghe câu trả lời bằng giọng nói...',
+    statusTranscribing: 'Đang chuyển giọng nói thành văn bản...',
+    statusSpeaking: 'Đang chuẩn bị giọng đọc câu hỏi...',
+    statusReady: 'Sẵn sàng nhận câu trả lời',
+    stateCompleted: 'Hoàn tất',
+    stateAiReviewing: 'AI đang chấm',
+    stateRecording: 'Đang ghi âm',
+    stateTranscribing: 'Đang chuyển giọng',
+    stateSpeaking: 'Đang đọc',
+    stateProgress: 'Đang phỏng vấn',
+    pollyCreating: 'Đang tạo audio câu hỏi...',
+    pollyPlaying: 'Đang đọc câu hỏi bằng Amazon Polly',
+    browserVoice: 'Đang đọc bằng giọng trình duyệt',
+    transcribeSending: 'Đang gửi câu trả lời đến Amazon Transcribe...',
+    transcribeDone: 'Amazon Transcribe đã hoàn tất. Hãy kiểm tra văn bản rồi bấm Gửi.',
+    recordingVoice: 'Đang ghi âm câu trả lời...',
+    micUnsupported: 'Trình duyệt này không hỗ trợ ghi âm microphone.',
+    micBlocked: 'Bạn chưa cấp quyền microphone hoặc không tìm thấy microphone.',
+    noAudio: 'Không ghi được audio. Hãy thử lại.',
+    cameraUnsupported: 'Trình duyệt này không hỗ trợ camera.',
+    cameraBlocked: 'Bạn chưa cấp quyền camera hoặc không tìm thấy camera.',
+  },
+}
+
 const awsSteps = [
-  { label: 'Amazon Polly', value: 'Question voice' },
-  { label: 'Amazon Transcribe', value: 'Speech to text' },
-  { label: 'Amazon Bedrock', value: 'AI feedback' },
-  { label: 'Amazon S3', value: 'Audio storage' },
+  { label: 'Amazon Polly', value: 'Question audio generation' },
+  { label: 'Amazon Transcribe', value: 'Voice answer to text' },
+  { label: 'Amazon Bedrock', value: 'AI scoring and feedback' },
+  { label: 'Amazon S3', value: 'Audio and transcript storage' },
+]
+
+const ONLINE_VIETNAMESE_VOICE_URI = 'online-vietnamese-voice'
+
+const defaultInterviewQuestionCount = 5
+const interviewQuestionOptions = [2, 3, 4, 5, 6, 7, 8]
+
+function getStoredInterviewQuestionCount() {
+  const savedCount = Number(loadSettings().questionCount)
+
+  return interviewQuestionOptions.includes(savedCount)
+    ? savedCount
+    : defaultInterviewQuestionCount
+}
+
+const roleCategories = [
+  { id: 'all', label: 'All' },
+  { id: 'ai', label: 'AI & ML' },
+  { id: 'data', label: 'Data' },
+  { id: 'cloud', label: 'Cloud' },
+  { id: 'frontend', label: 'Frontend' },
+  { id: 'backend', label: 'Backend' },
+]
+
+const interviewRoles = [
+  {
+    id: 'ai-engineer',
+    label: 'AI Engineer',
+    category: 'ai',
+    mark: 'AI',
+    count: 82,
+    focus: 'Python, LLMs, RAG',
+    skills: ['Python', 'Machine Learning', 'LLM', 'RAG', 'AWS Bedrock', 'Vector Database'],
+    description: 'Build AI features, integrate models, and evaluate production behavior.',
+    questionGroups: [
+      [
+        'For an AI Engineer role, how would you design an AI feature from problem definition to production release?',
+        'Describe an AI system you would build for this product and explain the model, API, and data flow.',
+      ],
+      [
+        'How would you evaluate an LLM or ML feature before allowing real users to depend on it?',
+        'If an AI answer is inconsistent, how would you debug prompts, data, model settings, and logs?',
+      ],
+      [
+        'Explain how you would build a RAG workflow with embeddings, retrieval, generation, and answer evaluation.',
+        'How would you monitor quality, latency, and cost for an AI feature in production?',
+      ],
+    ],
+  },
+  {
+    id: 'genai-engineer',
+    label: 'Generative AI Engineer',
+    category: 'ai',
+    mark: 'GA',
+    count: 74,
+    focus: 'Prompting, RAG, Bedrock',
+    skills: ['Prompt Engineering', 'RAG', 'AWS Bedrock', 'Vector Search', 'Guardrails', 'Evaluation'],
+    description: 'Create LLM workflows with prompts, retrieval, safety, and evaluation.',
+    questionGroups: [
+      [
+        'How would you design a prompt and retrieval flow for a CV-based interview assistant?',
+        'What would you include in a prompt template to make an AI interviewer consistent and safe?',
+      ],
+      [
+        'How would you evaluate hallucination risk and answer quality in a generative AI feature?',
+        'How would you compare two prompt versions before releasing one to users?',
+      ],
+      [
+        'Design a serverless GenAI workflow using API Gateway, Lambda, Bedrock, and DynamoDB.',
+        'How would you add guardrails, logging, and fallback behavior to a GenAI application?',
+      ],
+    ],
+  },
+  {
+    id: 'ml-engineer',
+    label: 'Machine Learning Engineer',
+    category: 'ai',
+    mark: 'ML',
+    count: 69,
+    focus: 'Training, deployment, monitoring',
+    skills: ['Python', 'Model Training', 'Feature Engineering', 'Model Serving', 'MLOps', 'Monitoring'],
+    description: 'Train, deploy, and monitor models for reliable product use.',
+    questionGroups: [
+      [
+        'How would you turn raw data into features for a machine learning model?',
+        'Explain your approach to training, validating, and testing an ML model.',
+      ],
+      [
+        'How would you deploy a model behind an API and keep latency acceptable?',
+        'If a model performs well offline but poorly in production, what would you investigate?',
+      ],
+      [
+        'How would you monitor model drift, data quality, and prediction confidence over time?',
+        'What metrics would you use to decide whether an ML model is ready for release?',
+      ],
+    ],
+  },
+  {
+    id: 'data-scientist',
+    label: 'Data Scientist',
+    category: 'data',
+    mark: 'DS',
+    count: 66,
+    focus: 'Statistics, SQL, insights',
+    skills: ['Python', 'SQL', 'Statistics', 'EDA', 'Experimentation', 'Visualization'],
+    description: 'Analyze data, explain patterns, and turn experiments into decisions.',
+    questionGroups: [
+      [
+        'How would you explore a new dataset before building a model or dashboard?',
+        'Describe how you would turn messy interview history data into useful product insights.',
+      ],
+      [
+        'How would you explain precision, recall, and false positives to a non-technical stakeholder?',
+        'What statistical checks would you use before trusting a trend in user performance data?',
+      ],
+      [
+        'How would you design an A/B test for improving the AI interview flow?',
+        'What dashboard would you build to help candidates understand their learning progress?',
+      ],
+    ],
+  },
+  {
+    id: 'mlops-engineer',
+    label: 'MLOps Engineer',
+    category: 'cloud',
+    mark: 'MO',
+    count: 58,
+    focus: 'CI/CD, model ops, observability',
+    skills: ['Docker', 'CI/CD', 'Model Registry', 'Monitoring', 'AWS Lambda', 'CloudWatch'],
+    description: 'Automate model delivery, monitoring, rollback, and operational controls.',
+    questionGroups: [
+      [
+        'How would you design a CI/CD pipeline for an ML or AI service?',
+        'What checks should happen before promoting a model or prompt change to production?',
+      ],
+      [
+        'How would you monitor model latency, failures, cost, and quality from CloudWatch logs?',
+        'If a deployed AI service starts failing, what rollback and debugging steps would you take?',
+      ],
+      [
+        'How would you manage environment variables, permissions, and secrets for an AI backend?',
+        'How would you version prompts, model artifacts, and evaluation reports?',
+      ],
+    ],
+  },
+  {
+    id: 'data-engineer',
+    label: 'Data Engineer',
+    category: 'data',
+    mark: 'DE',
+    count: 61,
+    focus: 'Pipelines, storage, quality',
+    skills: ['Python', 'SQL', 'ETL', 'DynamoDB', 'S3', 'Data Quality'],
+    description: 'Build reliable pipelines and storage models for AI-ready data.',
+    questionGroups: [
+      [
+        'How would you design a data pipeline that stores CV, transcript, and interview results reliably?',
+        'What data quality checks would you add before AI evaluation uses candidate data?',
+      ],
+      [
+        'How would you model interview history for fast reads across users and devices?',
+        'How would you choose between DynamoDB, S3, and relational storage for interview data?',
+      ],
+      [
+        'If a data pipeline creates duplicate or missing records, how would you debug it?',
+        'How would you make a data pipeline observable and easy to replay after failure?',
+      ],
+    ],
+  },
+  {
+    id: 'computer-vision-engineer',
+    label: 'Computer Vision Engineer',
+    category: 'ai',
+    mark: 'CV',
+    count: 44,
+    focus: 'Images, models, evaluation',
+    skills: ['Python', 'Computer Vision', 'CNN', 'Image Processing', 'Model Evaluation', 'Deployment'],
+    description: 'Process visual data, train vision models, and evaluate accuracy.',
+    questionGroups: [
+      [
+        'How would you prepare and augment image data before training a computer vision model?',
+        'What would you check if a vision model works on test images but fails on real camera input?',
+      ],
+      [
+        'How would you evaluate a classification or detection model beyond simple accuracy?',
+        'Explain a computer vision pipeline from image capture to model prediction and API response.',
+      ],
+      [
+        'How would you handle lighting, camera quality, and privacy issues in a vision feature?',
+        'How would you deploy a lightweight vision model for a user-facing app?',
+      ],
+    ],
+  },
+  {
+    id: 'nlp-engineer',
+    label: 'NLP Engineer',
+    category: 'ai',
+    mark: 'NLP',
+    count: 52,
+    focus: 'Text, embeddings, transformers',
+    skills: ['NLP', 'Transformers', 'Embeddings', 'Text Classification', 'RAG', 'Evaluation'],
+    description: 'Build text understanding, retrieval, and language workflows.',
+    questionGroups: [
+      [
+        'How would you process CV text before using it for question generation or scoring?',
+        'How would you design an NLP pipeline for extracting skills, projects, and experience from a CV?',
+      ],
+      [
+        'How would you evaluate text classification or semantic search quality?',
+        'What are embeddings, and how would you use them in a candidate interview platform?',
+      ],
+      [
+        'How would you handle noisy transcripts before sending them to an AI evaluator?',
+        'How would you reduce bias and unclear feedback in an NLP-based scoring system?',
+      ],
+    ],
+  },
+  {
+    id: 'frontend-ai-engineer',
+    label: 'Frontend AI Engineer',
+    category: 'frontend',
+    mark: 'FE',
+    count: 49,
+    focus: 'React, AI UX, streaming',
+    skills: ['React', 'TypeScript', 'AI UX', 'Streaming UI', 'Accessibility', 'API Integration'],
+    description: 'Build polished AI product interfaces with reliable API states.',
+    questionGroups: [
+      [
+        'How would you design a React interface for an AI interview chat with loading, retry, and error states?',
+        'How would you make an AI feature feel trustworthy and easy to understand in the UI?',
+      ],
+      [
+        'How would you handle streaming AI responses, partial results, and cancellation in React?',
+        'How would you test a frontend that depends on slow or unreliable AI APIs?',
+      ],
+      [
+        'How would you design accessible camera, voice, and chat controls for an interview page?',
+        'What state management approach would you use for an AI interview session and why?',
+      ],
+    ],
+  },
+  {
+    id: 'backend-ai-engineer',
+    label: 'Backend AI Engineer',
+    category: 'backend',
+    mark: 'BE',
+    count: 57,
+    focus: 'APIs, queues, AI services',
+    skills: ['Python', 'API Gateway', 'AWS Lambda', 'DynamoDB', 'Bedrock', 'Error Handling'],
+    description: 'Build APIs that connect AI services, storage, and secure workflows.',
+    questionGroups: [
+      [
+        'How would you design a backend API that creates AI interview questions from a CV?',
+        'How would you structure Lambda functions for upload, analysis, interview, scoring, and history?',
+      ],
+      [
+        'How would you handle retries, timeouts, and fallback behavior when an AI provider fails?',
+        'How would you design IAM permissions for a backend service that reads CV data and writes interview results?',
+      ],
+      [
+        'How would you store answers, attempts, scores, and audit logs in DynamoDB?',
+        'How would you debug an API Gateway route that returns Internal Server Error during an AI call?',
+      ],
+    ],
+  },
 ]
 
 const fallbackUser = {
@@ -41,6 +469,10 @@ const fallbackUser = {
 export default function Interview({
   cvAnalysis,
   currentUser = fallbackUser,
+  language,
+  colorTheme = 'black',
+  onLanguageChange = () => {},
+  onThemeChange = () => {},
   onNavigate = () => {},
   onLogout = () => {},
   onInterviewComplete = () => {},
@@ -54,9 +486,35 @@ export default function Interview({
   const browserTranscriptRef = useRef('')
   const shouldProcessRecordingRef = useRef(false)
   const chunksRef = useRef([])
+  const cvIdRef = useRef(cvAnalysis?.cvId)
+  const initialQuestionCountRef = useRef(getStoredInterviewQuestionCount())
+  const activeLanguage = normalizeLanguage(language || loadSettings().language)
+  const appCopy = getAppCopy(activeLanguage)
+  const languageConfig = getLanguageConfig(activeLanguage)
+  const copy = interviewCopy[activeLanguage]
+  const voiceSteps = activeLanguage === 'vi'
+    ? [
+      { label: 'Online Vietnamese Voice', value: 'Đọc câu hỏi tiếng Việt' },
+      { label: 'Amazon Transcribe', value: 'Giọng nói sang văn bản vi-VN' },
+      { label: 'Amazon Bedrock', value: 'AI feedback' },
+      { label: 'Amazon S3', value: 'Lưu audio' },
+    ]
+    : awsSteps
+  const hasInterviewCv = Boolean(cvAnalysis?.cvId)
+  const initialRoleProfile = createCvRoleProfile(cvAnalysis)
 
-  const [session, setSession] = useState(() => createInterviewSession(cvAnalysis))
-  const [messages, setMessages] = useState(() => createInitialMessages(session, currentUser))
+  const [selectedRole, setSelectedRole] = useState(initialRoleProfile)
+  const [selectedQuestionCount, setSelectedQuestionCount] = useState(initialQuestionCountRef.current)
+  const [roleCategory, setRoleCategory] = useState('all')
+  const [roleQuery, setRoleQuery] = useState('')
+  const [session, setSession] = useState(() => createInterviewSession(cvAnalysis, {
+    roleProfile: initialRoleProfile,
+    questionCount: initialQuestionCountRef.current,
+    language: activeLanguage,
+  }))
+  const [messages, setMessages] = useState(() => (
+    hasInterviewCv ? createInitialMessages(session, currentUser, activeLanguage) : []
+  ))
   const [questionIndex, setQuestionIndex] = useState(0)
   const [draft, setDraft] = useState('')
   const [cameraEnabled, setCameraEnabled] = useState(false)
@@ -71,9 +529,35 @@ export default function Interview({
   const [isCompleted, setIsCompleted] = useState(false)
   const [interviewSource, setInterviewSource] = useState('Mock AI')
   const [apiStatus, setApiStatus] = useState('Connecting to AWS interview API...')
+  const [isChatExpanded, setIsChatExpanded] = useState(false)
+  const [speechVoices, setSpeechVoices] = useState([])
+  const [selectedSpeechVoiceURI, setSelectedSpeechVoiceURI] = useState(() => {
+    const savedVoiceURI = loadSettings().speechVoiceURI
 
-  const currentQuestion = session.questions[questionIndex] ?? session.questions[0]
-  const progress = Math.round(((questionIndex + 1) / session.questions.length) * 100)
+    if (activeLanguage === 'vi' && savedVoiceURI === ONLINE_VIETNAMESE_VOICE_URI) {
+      return 'auto'
+    }
+
+    return savedVoiceURI || 'auto'
+  })
+
+  const questionCount = hasInterviewCv ? session.questions.length : 0
+  const currentQuestion = hasInterviewCv ? (session.questions[questionIndex] ?? session.questions[0]) : ''
+  const progress = questionCount ? Math.round(((questionIndex + 1) / questionCount) * 100) : 0
+  const answeredCount = answerReviews.length
+  const cvRoleProfile = createCvRoleProfile(cvAnalysis)
+  const visibleRoles = filterInterviewRoles({ category: roleCategory, query: roleQuery })
+  const isUsingCvRole = selectedRole.id === 'cv-role'
+  const interviewState = getInterviewState({
+    isCompleted,
+    isAiThinking,
+    isRecording,
+    isTranscribing,
+    isQuestionAudioLoading,
+    copy,
+  })
+  const speechVoiceOptions = getSpeechVoiceOptions(speechVoices, activeLanguage)
+  const selectedSpeechVoice = speechVoices.find((voice) => voice.voiceURI === selectedSpeechVoiceURI)
 
   useEffect(() => {
     return () => {
@@ -88,26 +572,99 @@ export default function Interview({
   useEffect(() => {
     let isMounted = true
 
+    const loadVoices = () => getBrowserSpeechVoices().then((voices) => {
+      if (isMounted) {
+        setSpeechVoices(voices)
+      }
+    })
+
+    loadVoices()
+    window.speechSynthesis?.addEventListener?.('voiceschanged', loadVoices)
+
+    return () => {
+      isMounted = false
+      window.speechSynthesis?.removeEventListener?.('voiceschanged', loadVoices)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeLanguage !== 'vi' && selectedSpeechVoiceURI === ONLINE_VIETNAMESE_VOICE_URI) {
+      setSelectedSpeechVoiceURI('auto')
+    }
+  }, [activeLanguage, selectedSpeechVoiceURI])
+
+  useEffect(() => {
+    if (cvIdRef.current === cvAnalysis?.cvId) {
+      return
+    }
+
+    cvIdRef.current = cvAnalysis?.cvId
+    setSelectedRole(createCvRoleProfile(cvAnalysis))
+  }, [cvAnalysis])
+
+  useEffect(() => {
+    let isMounted = true
+
     async function loadAwsInterview() {
+      const localSession = createInterviewSession(cvAnalysis, {
+        roleProfile: selectedRole,
+        questionCount: selectedQuestionCount,
+        language: activeLanguage,
+      })
+
+      if (!hasInterviewCv) {
+        setSession(localSession)
+        setMessages([])
+        setQuestionIndex(0)
+        setDraft('')
+        setAnswerReviews([])
+        setInterviewResult(null)
+        setIsCompleted(false)
+        setInterviewSource('Waiting for CV')
+        setApiStatus(copy.noCvTitle)
+        return
+      }
+
+      setApiStatus(activeLanguage === 'vi'
+        ? `Đang tạo câu hỏi phỏng vấn cho ${selectedRole.label}...`
+        : `Creating ${selectedRole.label} interview questions...`)
+
       try {
-        const awsSession = await createInterviewOnAws({ cvAnalysis, currentUser })
+        const awsSession = await createInterviewOnAws({
+          cvAnalysis,
+          currentUser,
+          roleProfile: selectedRole,
+          questionCount: selectedQuestionCount,
+          language: activeLanguage,
+        })
 
         if (!isMounted || !awsSession.questions.length) {
           return
         }
 
         setSession(awsSession)
-        setMessages(createInitialMessages(awsSession, currentUser))
+        setMessages(createInitialMessages(awsSession, currentUser, activeLanguage))
         setQuestionIndex(0)
         setAnswerReviews([])
         setInterviewResult(null)
         setIsCompleted(false)
         setInterviewSource('AWS')
-        setApiStatus('Using AWS Lambda + DynamoDB')
+        setApiStatus(activeLanguage === 'vi'
+          ? `Đang dùng AWS Lambda + DynamoDB cho ${awsSession.role}`
+          : `Using AWS Lambda + DynamoDB for ${awsSession.role}`)
       } catch (error) {
         if (isMounted) {
+          setSession(localSession)
+          setMessages(createInitialMessages(localSession, currentUser, activeLanguage))
+          setQuestionIndex(0)
+          setDraft('')
+          setAnswerReviews([])
+          setInterviewResult(null)
+          setIsCompleted(false)
           setInterviewSource('Mock AI')
-          setApiStatus(`Using local fallback: ${error.message}`)
+          setApiStatus(activeLanguage === 'vi'
+            ? `Đang dùng fallback cục bộ cho ${localSession.role}: ${error.message}`
+            : `Using local fallback for ${localSession.role}: ${error.message}`)
         }
       }
     }
@@ -117,26 +674,51 @@ export default function Interview({
     return () => {
       isMounted = false
     }
-  }, [cvAnalysis, currentUser])
+  }, [cvAnalysis, currentUser, hasInterviewCv, selectedRole, selectedQuestionCount, activeLanguage, copy])
 
-  async function resetInterview(nextSession = createInterviewSession(cvAnalysis)) {
+  async function resetInterview(
+    nextSession = createInterviewSession(cvAnalysis, {
+      roleProfile: selectedRole,
+      questionCount: selectedQuestionCount,
+      language: activeLanguage,
+    }),
+    roleProfile = selectedRole,
+    questionCountValue = selectedQuestionCount,
+  ) {
+    if (!hasInterviewCv) {
+      setApiStatus(copy.noCvTitle)
+      return
+    }
+
     stopSpeaking()
     stopQuestionAudio()
     stopBrowserSpeechRecognition()
     stopRecording({ process: false })
-    setApiStatus('Creating a new interview session...')
+    setApiStatus(activeLanguage === 'vi'
+      ? `Đang tạo phiên phỏng vấn mới cho ${roleProfile.label}...`
+      : `Creating a new ${roleProfile.label} interview session...`)
 
     try {
-      const awsSession = await createInterviewOnAws({ cvAnalysis, currentUser })
+      const awsSession = await createInterviewOnAws({
+        cvAnalysis,
+        currentUser,
+        roleProfile,
+        questionCount: questionCountValue,
+        language: activeLanguage,
+      })
       setSession(awsSession)
-      setMessages(createInitialMessages(awsSession, currentUser))
+      setMessages(createInitialMessages(awsSession, currentUser, activeLanguage))
       setInterviewSource('AWS')
-      setApiStatus('Using AWS Lambda + DynamoDB')
+      setApiStatus(activeLanguage === 'vi'
+        ? `Đang dùng AWS Lambda + DynamoDB cho ${awsSession.role}`
+        : `Using AWS Lambda + DynamoDB for ${awsSession.role}`)
     } catch (error) {
       setSession(nextSession)
-      setMessages(createInitialMessages(nextSession, currentUser))
+      setMessages(createInitialMessages(nextSession, currentUser, activeLanguage))
       setInterviewSource('Mock AI')
-      setApiStatus(`Using local fallback: ${error.message}`)
+      setApiStatus(activeLanguage === 'vi'
+        ? `Đang dùng fallback cục bộ cho ${nextSession.role}: ${error.message}`
+        : `Using local fallback for ${nextSession.role}: ${error.message}`)
     }
 
     setQuestionIndex(0)
@@ -147,6 +729,34 @@ export default function Interview({
     setIsCompleted(false)
   }
 
+  function handleSelectRole(role) {
+    if (role.id === selectedRole.id) {
+      return
+    }
+
+    setSelectedRole(role)
+  }
+
+  function handleUseCvRole() {
+    if (selectedRole.id === 'cv-role') {
+      return
+    }
+
+    setSelectedRole(createCvRoleProfile(cvAnalysis))
+  }
+
+  function handleQuestionCountChange(value) {
+    setSelectedQuestionCount(Number(value))
+  }
+
+  function handleSpeechVoiceChange(value) {
+    setSelectedSpeechVoiceURI(value)
+    saveSettings({
+      ...loadSettings(),
+      speechVoiceURI: value,
+    })
+  }
+
   async function toggleCamera() {
     if (cameraEnabled) {
       stopCamera()
@@ -155,7 +765,7 @@ export default function Interview({
     }
 
     if (!navigator.mediaDevices?.getUserMedia) {
-      setCameraError('Camera access is not supported in this browser.')
+      setCameraError(copy.cameraUnsupported)
       return
     }
 
@@ -170,7 +780,7 @@ export default function Interview({
         videoRef.current.play?.()
       }
     } catch {
-      setCameraError('Camera permission was blocked or no camera was found.')
+      setCameraError(copy.cameraBlocked)
       setCameraEnabled(false)
     }
   }
@@ -186,7 +796,7 @@ export default function Interview({
     }
 
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
-      setVoiceError('Microphone recording is not supported in this browser.')
+      setVoiceError(copy.micUnsupported)
       return
     }
 
@@ -217,12 +827,12 @@ export default function Interview({
         }
 
         if (!audioBlob.size) {
-          setVoiceError('No audio was recorded. Please try again.')
+          setVoiceError(copy.noAudio)
           return
         }
 
         setIsTranscribing(true)
-        setVoiceError('Sending your answer to Amazon Transcribe...')
+        setVoiceError(copy.transcribeSending)
 
         try {
           const result = await transcribeAnswerAudio({
@@ -230,18 +840,23 @@ export default function Interview({
             userId: currentUser.userId,
             interviewId: session.interviewId,
             questionIndex,
+            languageCode: languageConfig.transcribeLanguageCode,
           })
 
           setDraft(result.transcript)
-          setVoiceError('Amazon Transcribe completed. Review the text, then press Send.')
+          setVoiceError(copy.transcribeDone)
         } catch (error) {
           const browserTranscript = browserTranscriptRef.current.trim()
 
           if (browserTranscript) {
             setDraft(browserTranscript)
-            setVoiceError(`AWS Transcribe unavailable, using browser speech recognition: ${error.message}`)
+            setVoiceError(activeLanguage === 'vi'
+              ? `AWS Transcribe chưa dùng được, đang dùng nhận diện giọng nói của trình duyệt: ${error.message}`
+              : `AWS Transcribe unavailable, using browser speech recognition: ${error.message}`)
           } else {
-            setVoiceError(`AWS Transcribe unavailable: ${error.message}. No transcript was generated. Please type your answer manually or check AWS route/IAM.`)
+            setVoiceError(activeLanguage === 'vi'
+              ? `AWS Transcribe chưa dùng được: ${error.message}. Chưa tạo được transcript, hãy nhập câu trả lời thủ công hoặc kiểm tra AWS route/IAM.`
+              : `AWS Transcribe unavailable: ${error.message}. No transcript was generated. Please type your answer manually or check AWS route/IAM.`)
           }
         } finally {
           setIsTranscribing(false)
@@ -253,9 +868,9 @@ export default function Interview({
       startBrowserSpeechRecognition()
       recorder.start()
       setIsRecording(true)
-      setVoiceError('Recording your voice answer...')
+      setVoiceError(copy.recordingVoice)
     } catch {
-      setVoiceError('Microphone permission was blocked or no microphone was found.')
+      setVoiceError(copy.micBlocked)
       setIsRecording(false)
     }
   }
@@ -283,7 +898,7 @@ export default function Interview({
     stopBrowserSpeechRecognition()
 
     const recognition = new SpeechRecognition()
-    recognition.lang = 'en-US'
+    recognition.lang = languageConfig.speechRecognitionLanguage
     recognition.continuous = true
     recognition.interimResults = true
 
@@ -359,14 +974,76 @@ export default function Interview({
     stopQuestionAudio()
     stopSpeaking()
     setIsQuestionAudioLoading(true)
-    setVoiceError('Creating question audio with Amazon Polly...')
+    setVoiceError(languageConfig.usePolly ? copy.pollyCreating : copy.browserVoice)
 
     try {
+      if (!languageConfig.usePolly) {
+        if (selectedSpeechVoiceURI === ONLINE_VIETNAMESE_VOICE_URI) {
+          const controller = await playOnlineVietnameseSpeech(currentQuestion)
+
+          if (!controller) {
+            throw new Error(copy.missingVietnameseVoice)
+          }
+
+          questionAudioRef.current = controller
+          controller.done
+            .then(() => {
+              if (questionAudioRef.current === controller) {
+                setVoiceError('')
+                questionAudioRef.current = null
+              }
+            })
+            .catch((error) => {
+              if (questionAudioRef.current === controller) {
+                speakText(currentQuestion, languageConfig.speechSynthesisLanguage, {
+                  rate: languageConfig.speechSynthesisRate,
+                  voiceNames: languageConfig.speechVoiceNames,
+                  requireLanguageMatch: false,
+                }).then((speechResult) => {
+                  if (speechResult.spoken) {
+                    setVoiceError(`${copy.browserVoice} (${speechResult.voiceName}): ${error.message}`)
+                    return
+                  }
+
+                  setVoiceError(error.message)
+                })
+                questionAudioRef.current = null
+              }
+            })
+          setVoiceError(`${copy.browserVoice} (${copy.onlineVietnameseVoice}).`)
+          return
+        }
+
+        const browserVoiceURI = selectedSpeechVoiceURI === 'auto'
+          || selectedSpeechVoiceURI === ONLINE_VIETNAMESE_VOICE_URI
+          ? ''
+          : selectedSpeechVoiceURI
+        const speechResult = await speakText(currentQuestion, languageConfig.speechSynthesisLanguage, {
+          rate: languageConfig.speechSynthesisRate,
+          voiceURI: browserVoiceURI,
+          voiceNames: languageConfig.speechVoiceNames,
+          requireLanguageMatch: false,
+        })
+
+        if (!speechResult.spoken) {
+          throw new Error(speechResult.reason === 'missing-language-voice'
+            ? copy.missingVietnameseVoice
+            : activeLanguage === 'vi'
+            ? 'Trình duyệt chưa hỗ trợ text-to-speech.'
+            : 'Browser text-to-speech is not supported.')
+        }
+
+        setVoiceError(`${copy.browserVoice} (${speechResult.voiceName}).`)
+        return
+      }
+
       const result = await synthesizeQuestionAudio({
         text: currentQuestion,
         userId: currentUser.userId,
         interviewId: session.interviewId,
         questionIndex,
+        voiceId: languageConfig.pollyVoiceId,
+        engine: languageConfig.pollyEngine,
       })
       const audio = new Audio(result.audioUrl)
       questionAudioRef.current = audio
@@ -374,14 +1051,27 @@ export default function Interview({
         setVoiceError('')
       }
       await audio.play()
-      setVoiceError(`Playing question with Amazon Polly (${result.voiceId}).`)
+      setVoiceError(`${copy.pollyPlaying} (${result.voiceId}).`)
     } catch (error) {
-      const didSpeak = speakText(currentQuestion)
+      const browserVoiceURI = selectedSpeechVoiceURI === 'auto'
+        || selectedSpeechVoiceURI === ONLINE_VIETNAMESE_VOICE_URI
+        ? ''
+        : selectedSpeechVoiceURI
+      const speechResult = await speakText(currentQuestion, languageConfig.speechSynthesisLanguage, {
+        rate: languageConfig.speechSynthesisRate,
+        voiceURI: browserVoiceURI,
+        voiceNames: languageConfig.speechVoiceNames,
+        requireLanguageMatch: false,
+      })
 
-      if (didSpeak) {
-        setVoiceError(`AWS Polly unavailable, using browser voice: ${error.message}`)
+      if (speechResult.spoken) {
+        setVoiceError(activeLanguage === 'vi'
+          ? `${copy.browserVoice} (${speechResult.voiceName}): ${error.message}`
+          : `AWS Polly unavailable, using browser voice (${speechResult.voiceName}): ${error.message}`)
       } else {
-        setVoiceError(`AWS Polly unavailable and browser text-to-speech is not supported: ${error.message}`)
+        setVoiceError(activeLanguage === 'vi'
+          ? `Không đọc được câu hỏi bằng giọng nói: ${error.message}`
+          : `AWS Polly unavailable and browser text-to-speech is not supported: ${error.message}`)
       }
     } finally {
       setIsQuestionAudioLoading(false)
@@ -390,8 +1080,12 @@ export default function Interview({
 
   function stopQuestionAudio() {
     if (questionAudioRef.current) {
-      questionAudioRef.current.pause()
-      questionAudioRef.current.currentTime = 0
+      if (typeof questionAudioRef.current.stop === 'function') {
+        questionAudioRef.current.stop()
+      } else {
+        questionAudioRef.current.pause()
+        questionAudioRef.current.currentTime = 0
+      }
       questionAudioRef.current = null
     }
   }
@@ -399,7 +1093,7 @@ export default function Interview({
   async function sendAnswer(answerText = draft) {
     const answer = answerText.trim()
 
-    if (!answer || isAiThinking || isCompleted) {
+    if (!hasInterviewCv || !answer || isAiThinking || isCompleted) {
       return
     }
 
@@ -424,12 +1118,15 @@ export default function Interview({
           questionIndex,
           question: currentQuestion,
           answer,
+          language: activeLanguage,
         })
-        : await askMockAi({ answer, question: currentQuestion, questionIndex })
+        : await askMockAi({ answer, question: currentQuestion, questionIndex, language: activeLanguage })
     } catch (error) {
-      setApiStatus(`AWS answer API failed, using fallback: ${error.message}`)
+      setApiStatus(activeLanguage === 'vi'
+        ? `API chấm câu trả lời AWS lỗi, dùng fallback: ${error.message}`
+        : `AWS answer API failed, using fallback: ${error.message}`)
       setInterviewSource('Mock AI')
-      aiResult = await askMockAi({ answer, question: currentQuestion, questionIndex })
+      aiResult = await askMockAi({ answer, question: currentQuestion, questionIndex, language: activeLanguage })
     }
 
     aiResult = enhanceInterviewFeedback({
@@ -439,6 +1136,7 @@ export default function Interview({
       currentUser,
       session,
       cvAnalysis,
+      language: activeLanguage,
     })
 
     const shouldAdvance = aiResult.shouldAdvance ?? true
@@ -467,7 +1165,7 @@ export default function Interview({
     const aiMessage = {
       id: createId(),
       sender: 'ai',
-      text: getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion }),
+      text: getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion, language: activeLanguage }),
       score: aiResult.score,
       createdAt: new Date().toISOString(),
     }
@@ -476,7 +1174,7 @@ export default function Interview({
     setAnswerReviews(acceptedReviews)
 
     if (completedResult) {
-      saveInterviewResult(completedResult)
+      saveInterviewResult(completedResult, currentUser.userId)
       setInterviewResult(completedResult)
       setIsCompleted(true)
       onInterviewComplete(completedResult)
@@ -498,10 +1196,75 @@ export default function Interview({
     }
   }
 
+  if (!hasInterviewCv) {
+    return (
+      <div className="dashboard-page interview-page">
+        <div className="dashboard-frame">
+          <InterviewSidebar appCopy={appCopy} currentPage="interview" onNavigate={onNavigate} onLogout={onLogout} />
+
+          <main className="dashboard-main">
+            <header className="topbar">
+              <div className="topbar-title">
+                <button
+                  className="icon-button"
+                  type="button"
+                  aria-label={appCopy.common.backDashboard}
+                  title={appCopy.common.backDashboard}
+                  onClick={() => onNavigate('dashboard')}
+                >
+                  <Icon name="arrowLeft" />
+                </button>
+                <div>
+                  <p>{copy.pageTitle}</p>
+                  <h2>{copy.setupRequired}</h2>
+                </div>
+              </div>
+
+              <div className="topbar-actions">
+                <PreferenceControls
+                  colorTheme={colorTheme}
+                  language={activeLanguage}
+                  onLanguageChange={onLanguageChange}
+                  onThemeChange={onThemeChange}
+                />
+                <div className="user-chip" aria-label={appCopy.common.currentUser}>
+                  <span>{currentUser.fullName}</span>
+                  <small>{currentUser.role}</small>
+                  <div className="avatar">{currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt="" /> : currentUser.initials}</div>
+                </div>
+              </div>
+            </header>
+
+            <div className="dashboard-content interview-content">
+              <section className="panel interview-empty-state">
+                <div className="interview-empty-icon"><Icon name="file" /></div>
+                <div>
+                  <p className="eyebrow">{copy.noCvEyebrow}</p>
+                  <h1>{copy.noCvTitle}</h1>
+                  <p>{copy.noCvText}</p>
+                </div>
+                <div className="interview-empty-actions">
+                  <button className="primary-result-action" type="button" onClick={() => onNavigate('upload-cv')}>
+                    <Icon name="upload" />
+                    {copy.uploadCv}
+                  </button>
+                  <button className="secondary-result-action" type="button" onClick={() => onNavigate('dashboard')}>
+                    <Icon name="dashboard" />
+                    {copy.backDashboard}
+                  </button>
+                </div>
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="dashboard-page interview-page">
       <div className="dashboard-frame">
-        <InterviewSidebar currentPage="interview" onNavigate={onNavigate} onLogout={onLogout} />
+        <InterviewSidebar appCopy={appCopy} currentPage="interview" onNavigate={onNavigate} onLogout={onLogout} />
 
         <main className="dashboard-main">
           <header className="topbar">
@@ -509,89 +1272,123 @@ export default function Interview({
               <button
                 className="icon-button"
                 type="button"
-                aria-label="Back to dashboard"
-                title="Back to dashboard"
+                aria-label={appCopy.common.backDashboard}
+                title={appCopy.common.backDashboard}
                 onClick={() => onNavigate('dashboard')}
               >
                 <Icon name="arrowLeft" />
               </button>
               <div>
-                <p>AI Interview</p>
+                <p>{copy.pageTitle}</p>
                 <h2>{session.role}</h2>
               </div>
             </div>
 
             <div className="topbar-actions">
-              <button className="icon-button" type="button" aria-label="Notifications" title="Notifications">
-                <Icon name="bell" />
-              </button>
-              <div className="user-chip" aria-label="Current user">
+              <PreferenceControls
+                colorTheme={colorTheme}
+                language={activeLanguage}
+                onLanguageChange={onLanguageChange}
+                onThemeChange={onThemeChange}
+              />
+              <div className="user-chip" aria-label={appCopy.common.currentUser}>
                 <span>{currentUser.fullName}</span>
                 <small>{currentUser.role}</small>
-                <div className="avatar">{currentUser.initials}</div>
+                <div className="avatar">{currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt="" /> : currentUser.initials}</div>
               </div>
             </div>
           </header>
 
           <div className="dashboard-content interview-content">
-            <section className="interview-stage">
+            <RolePickerPanel
+              categories={roleCategories}
+              roles={visibleRoles}
+              selectedRole={selectedRole}
+              cvRole={cvRoleProfile}
+              activeCategory={roleCategory}
+              query={roleQuery}
+              questionCount={selectedQuestionCount}
+              questionOptions={interviewQuestionOptions}
+              isUsingCvRole={isUsingCvRole}
+              onCategoryChange={setRoleCategory}
+              onQueryChange={setRoleQuery}
+              onQuestionCountChange={handleQuestionCountChange}
+              onSelectRole={handleSelectRole}
+              onUseCvRole={handleUseCvRole}
+              copy={copy}
+            />
+
+            <section className={`interview-stage ${isChatExpanded ? 'chat-expanded' : ''}`}>
               <div className="video-card panel">
                 <div className="video-header">
                   <div>
-                    <span className="live-dot">Live mock interview</span>
-                    <h1>Interview for {session.role}</h1>
+                    <span className={`live-dot ${cameraEnabled ? 'online' : ''}`}>
+                      {cameraEnabled ? copy.cameraOnline : copy.cameraStandby}
+                    </span>
+                    <h2>{copy.interviewRoom}</h2>
+                    <p>{currentUser.fullName} - {session.focus}</p>
                   </div>
                   <div className="question-progress" aria-label="Question progress">
                     <span>{questionIndex + 1}/{session.questions.length}</span>
                     <div className="mini-progress"><i style={{ width: `${progress}%` }} /></div>
-                    <small>{session.focus}</small>
                     <small>{interviewSource}</small>
                   </div>
                 </div>
 
                 <div className={`video-surface ${cameraEnabled ? 'camera-on' : ''}`}>
                   <video ref={videoRef} autoPlay playsInline muted />
+                  <div className="video-topbar">
+                    <span>{currentUser.fullName}</span>
+                    <strong className={isRecording ? 'recording-pill active' : 'recording-pill'}>
+                      {isRecording ? copy.recording : interviewState}
+                    </strong>
+                  </div>
                   {!cameraEnabled ? (
                     <div className="camera-placeholder">
                       <Icon name="videoOff" />
-                      <strong>Camera is off</strong>
-                      <span>Turn it on when you want a realistic interview room.</span>
+                      <strong>{copy.cameraOff}</strong>
+                      <span>{copy.cameraHidden}</span>
                     </div>
                   ) : null}
-                  <div className="ai-card">
-                    <div className="ai-avatar"><Icon name="brain" /></div>
-                    <div>
-                      <strong>AI Interviewer</strong>
-                      <span>{getInterviewerStatus({ isAiThinking, isRecording, isTranscribing, isQuestionAudioLoading })}</span>
-                    </div>
-                  </div>
                 </div>
 
-                <div className="interview-controls" aria-label="Interview controls">
-                  <button className={`round-control ${cameraEnabled ? 'active' : ''}`} type="button" onClick={toggleCamera} title="Toggle camera">
-                    <Icon name={cameraEnabled ? 'video' : 'videoOff'} />
-                  </button>
-                  <button
-                    className={`round-control ${isRecording ? 'danger active' : ''} ${isTranscribing ? 'processing' : ''}`}
-                    type="button"
-                    onClick={toggleRecording}
-                    title="Toggle microphone recording"
-                    disabled={isTranscribing}
-                  >
-                    <Icon name={isRecording ? 'stop' : 'mic'} />
-                  </button>
-                  <button
-                    className={`round-control ${isQuestionAudioLoading ? 'processing' : ''}`}
-                    type="button"
-                    onClick={handleSpeakQuestion}
-                    title="Read question aloud"
-                    disabled={isQuestionAudioLoading}
-                  >
-                    <Icon name="volume" />
-                  </button>
-                  <button className="round-control" type="button" onClick={() => onNavigate('dashboard')} title="Leave interview">
-                    <Icon name="logout" />
-                  </button>
+                <div className="interview-room-footer">
+                  <div className="interviewer-status-card">
+                    <div className="ai-avatar"><Icon name="brain" /></div>
+                    <div>
+                      <strong>{copy.aiInterviewer}</strong>
+                      <span>{getInterviewerStatus({ isAiThinking, isRecording, isTranscribing, isQuestionAudioLoading, copy })}</span>
+                    </div>
+                  </div>
+
+                  <div className="interview-controls" aria-label="Interview controls">
+                    <button className={`round-control ${cameraEnabled ? 'active' : ''}`} type="button" onClick={toggleCamera} aria-label="Toggle camera" title="Toggle camera">
+                      <Icon name={cameraEnabled ? 'video' : 'videoOff'} />
+                    </button>
+                    <button
+                      className={`round-control ${isRecording ? 'danger active' : ''} ${isTranscribing ? 'processing' : ''}`}
+                      type="button"
+                      onClick={toggleRecording}
+                      aria-label="Toggle microphone recording"
+                      title="Toggle microphone recording"
+                      disabled={isTranscribing}
+                    >
+                      <Icon name={isRecording ? 'stop' : 'mic'} />
+                    </button>
+                    <button
+                      className={`round-control ${isQuestionAudioLoading ? 'processing' : ''}`}
+                      type="button"
+                      onClick={handleSpeakQuestion}
+                      aria-label="Read question aloud"
+                      title="Read question aloud"
+                      disabled={isQuestionAudioLoading}
+                    >
+                      <Icon name="volume" />
+                    </button>
+                    <button className="round-control" type="button" onClick={() => onNavigate('dashboard')} aria-label="Leave interview" title="Leave interview">
+                      <Icon name="logout" />
+                    </button>
+                  </div>
                 </div>
 
                 {cameraError ? <p className="interview-error">{cameraError}</p> : null}
@@ -601,18 +1398,31 @@ export default function Interview({
               <div className="panel chat-panel">
                 <div className="panel-header">
                   <div>
-                    <h3>Conversation</h3>
-                    <p>{apiStatus}{isTranscribing ? ' - Amazon Transcribe is processing audio' : ''}</p>
+                    <h3>{copy.conversation}</h3>
+                    <p>{apiStatus}{isTranscribing ? copy.transcribeProcessing : ''}</p>
+                  </div>
+                  <div className="chat-header-actions" aria-label="Conversation status">
+                    <span>{interviewState}</span>
+                    <span>{answeredCount}/{session.questions.length} {copy.answered}</span>
+                    <button
+                      className="chat-size-button"
+                      type="button"
+                      onClick={() => setIsChatExpanded((current) => !current)}
+                      aria-pressed={isChatExpanded}
+                    >
+                      <Icon name={isChatExpanded ? 'minimize' : 'maximize'} />
+                      {isChatExpanded ? copy.compact : copy.expand}
+                    </button>
                   </div>
                 </div>
 
                 <div className="message-list" aria-label="Interview messages">
                   {messages.map((message) => (
-                    <MessageBubble key={message.id} message={message} />
+                    <MessageBubble key={message.id} message={message} copy={copy} />
                   ))}
                   {isAiThinking ? (
                     <div className="message-bubble ai thinking">
-                      <span>AI is preparing feedback...</span>
+                      <span>{copy.aiPreparing}</span>
                     </div>
                   ) : null}
                 </div>
@@ -628,13 +1438,13 @@ export default function Interview({
                     value={draft}
                     onChange={(event) => setDraft(event.target.value)}
                     onKeyDown={handleComposerKeyDown}
-                    placeholder={isCompleted ? 'Interview completed. Start a new interview to answer again.' : 'Type your answer here. Press Enter to send, Shift + Enter for a new line.'}
+                    placeholder={isCompleted ? copy.completedPlaceholder : copy.answerPlaceholder}
                     rows="3"
                     disabled={isCompleted}
                   />
                   <button className="send-button" type="submit" disabled={!draft.trim() || isAiThinking || isCompleted || isTranscribing}>
                     <Icon name="send" />
-                    Send
+                    {copy.send}
                   </button>
                 </form>
               </div>
@@ -645,6 +1455,7 @@ export default function Interview({
                 result={interviewResult}
                 onNavigate={onNavigate}
                 onRestart={() => resetInterview()}
+                copy={copy}
               />
             ) : null}
 
@@ -652,27 +1463,27 @@ export default function Interview({
               <aside className="panel question-card">
                 <div className="panel-header">
                   <div>
-                    <h3>Current Question</h3>
-                    <p>Use voice recording or chat to answer.</p>
+                    <h3>{copy.currentQuestion}</h3>
+                    <p>{copy.question} {questionIndex + 1}/{session.questions.length} - {session.focus}</p>
                   </div>
                   <button className="new-question-set-button" type="button" onClick={() => resetInterview()}>
                     <Icon name="shuffle" />
-                    {isCompleted ? 'New Interview' : 'New Set'}
+                    {isCompleted ? copy.newInterview : copy.newSet}
                   </button>
                 </div>
                 {isCompleted ? (
-                  <CompletionSummary result={interviewResult} />
+                  <CompletionSummary result={interviewResult} copy={copy} />
                 ) : (
                   <>
                     <p className="question-text">{currentQuestion}</p>
                     <div className="answer-mode-grid">
                       <ModeCard
                         icon="mic"
-                        title="Voice Answer"
-                        text="Record now, Amazon Transcribe fills the chat box."
+                        title={copy.voiceAnswer}
+                        text={copy.voiceAnswerText}
                         active={isRecording || isTranscribing}
                       />
-                      <ModeCard icon="message" title="Chat Answer" text="Type your answer and send it to the AI interviewer." />
+                      <ModeCard icon="message" title={copy.chatAnswer} text={copy.chatAnswerText} />
                     </div>
                   </>
                 )}
@@ -681,12 +1492,20 @@ export default function Interview({
               <aside className="panel aws-panel">
                 <div className="panel-header">
                   <div>
-                    <h3>AWS Voice Integration</h3>
-                    <p>Polly reads questions and Transcribe converts recorded answers.</p>
+                    <h3>{copy.awsVoice}</h3>
+                    <p>{copy.awsVoiceText}</p>
                   </div>
                 </div>
+                <BrowserVoicePicker
+                  copy={copy}
+                  activeLanguage={activeLanguage}
+                  voices={speechVoiceOptions}
+                  selectedVoice={selectedSpeechVoice}
+                  selectedVoiceURI={selectedSpeechVoiceURI}
+                  onChange={handleSpeechVoiceChange}
+                />
                 <div className="aws-step-list">
-                  {awsSteps.map((step) => (
+                  {voiceSteps.map((step) => (
                     <div className="aws-step" key={step.label}>
                       <span><Icon name="check" /></span>
                       <div>
@@ -705,16 +1524,184 @@ export default function Interview({
   )
 }
 
-function getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion }) {
+function RolePickerPanel({
+  categories,
+  roles,
+  selectedRole,
+  cvRole,
+  activeCategory,
+  query,
+  questionCount,
+  questionOptions,
+  isUsingCvRole,
+  onCategoryChange,
+  onQueryChange,
+  onQuestionCountChange,
+  onSelectRole,
+  onUseCvRole,
+  copy,
+}) {
+  return (
+    <section className="panel role-picker-panel" aria-label="Interview role picker">
+      <div className="role-picker-hero">
+        <div>
+          <p className="eyebrow">{copy.interviewRole}</p>
+          <h3>{copy.roleTitle}</h3>
+          <p>{copy.roleText}</p>
+        </div>
+
+        <div className="selected-role-card">
+          <span className="role-mark">{selectedRole.mark || 'AI'}</span>
+          <div>
+            <small>{copy.selectedRole}</small>
+            <strong>{selectedRole.label}</strong>
+            <p>{selectedRole.description}</p>
+          </div>
+          <div className="selected-role-tags">
+            <span>{getRoleCategoryLabel(selectedRole.category)}</span>
+            <span>{selectedRole.focus}</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="role-picker-toolbar">
+        <div className="role-category-tabs" aria-label="Role categories">
+          {categories.map((category) => (
+            <button
+              className={`role-filter-button ${activeCategory === category.id ? 'active' : ''}`}
+              type="button"
+              key={category.id}
+              onClick={() => onCategoryChange(category.id)}
+            >
+              {category.label}
+            </button>
+          ))}
+        </div>
+
+        <label className="role-search">
+          <Icon name="search" />
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder={copy.searchRole}
+          />
+        </label>
+
+        <label className="question-count-select">
+          <span>{copy.questions}</span>
+          <select
+            value={questionCount}
+            onChange={(event) => onQuestionCountChange(event.target.value)}
+          >
+            {questionOptions.map((option) => (
+              <option value={option} key={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="role-chip-grid">
+        <RoleOptionButton
+          role={cvRole}
+          selected={isUsingCvRole}
+          onSelect={onUseCvRole}
+        />
+        {roles.map((role) => (
+          <RoleOptionButton
+            role={role}
+            selected={selectedRole.id === role.id}
+            key={role.id}
+            onSelect={() => onSelectRole(role)}
+          />
+        ))}
+        {!roles.length ? <p className="role-empty-state">{copy.noRole}</p> : null}
+      </div>
+
+      {!isUsingCvRole ? (
+        <button className="back-to-cv-role-button" type="button" onClick={onUseCvRole}>
+          <Icon name="arrowLeft" />
+          {copy.backToCvRole}
+        </button>
+      ) : null}
+    </section>
+  )
+}
+
+function RoleOptionButton({ role, selected, onSelect }) {
+  return (
+    <button
+      className={`role-option-button ${selected ? 'active' : ''}`}
+      type="button"
+      onClick={onSelect}
+      aria-pressed={selected}
+    >
+      <span className="role-option-mark">{role.mark}</span>
+      <span className="role-option-copy">
+        <strong>{role.label}</strong>
+        <small>{role.focus}</small>
+      </span>
+      <span className="role-option-count">{role.count}</span>
+    </button>
+  )
+}
+
+function createCvRoleProfile(cvAnalysis) {
+  const skills = cvAnalysis?.skills?.filter(Boolean) || []
+  const label = cvAnalysis?.suggestedPosition || 'CV Suggested Role'
+
+  return {
+    id: 'cv-role',
+    label,
+    category: 'cv',
+    mark: 'CV',
+    count: skills.length,
+    focus: skills.slice(0, 3).join(', ') || 'CV skills',
+    skills,
+    description: 'Use the role and skill focus detected from your uploaded CV.',
+  }
+}
+
+function filterInterviewRoles({ category, query }) {
+  const normalizedQuery = query.trim().toLowerCase()
+
+  return interviewRoles.filter((role) => {
+    const matchesCategory = category === 'all' || role.category === category
+    const searchableText = [
+      role.label,
+      role.focus,
+      role.description,
+      ...role.skills,
+    ].join(' ').toLowerCase()
+
+    return matchesCategory && (!normalizedQuery || searchableText.includes(normalizedQuery))
+  })
+}
+
+function getRoleCategoryLabel(category) {
+  if (category === 'cv') {
+    return 'CV Role'
+  }
+
+  return roleCategories.find((item) => item.id === category)?.label || 'Custom Role'
+}
+
+function getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion, language = 'en' }) {
+  const isVietnamese = language === 'vi'
+
   if (!shouldAdvance) {
-    return `${aiResult.feedback}\n\nTry again: ${nextQuestion}`
+    return `${aiResult.feedback}\n\n${isVietnamese ? 'Thử lại' : 'Try again'}: ${nextQuestion}`
   }
 
   if (isLastQuestion) {
-    return `${aiResult.feedback}\n\nInterview completed. Your final result is ready below.`
+    return isVietnamese
+      ? `${aiResult.feedback}\n\nPhỏng vấn đã hoàn tất. Kết quả cuối cùng đã sẵn sàng bên dưới.`
+      : `${aiResult.feedback}\n\nInterview completed. Your final result is ready below.`
   }
 
-  return `${aiResult.feedback}\n\nNext question: ${nextQuestion}`
+  return `${aiResult.feedback}\n\n${isVietnamese ? 'Câu hỏi tiếp theo' : 'Next question'}: ${nextQuestion}`
 }
 
 function getInterviewerStatus({
@@ -722,49 +1709,66 @@ function getInterviewerStatus({
   isRecording,
   isTranscribing,
   isQuestionAudioLoading,
+  copy,
 }) {
-  if (isAiThinking) return 'Reviewing your answer...'
-  if (isRecording) return 'Listening to your voice answer...'
-  if (isTranscribing) return 'Transcribing your answer with AWS...'
-  if (isQuestionAudioLoading) return 'Preparing Polly voice...'
-  return 'Ready for your response'
+  if (isAiThinking) return copy.statusReviewing
+  if (isRecording) return copy.statusListening
+  if (isTranscribing) return copy.statusTranscribing
+  if (isQuestionAudioLoading) return copy.statusSpeaking
+  return copy.statusReady
 }
 
-function CompletionSummary({ result }) {
+function getInterviewState({
+  isCompleted,
+  isAiThinking,
+  isRecording,
+  isTranscribing,
+  isQuestionAudioLoading,
+  copy,
+}) {
+  if (isCompleted) return copy.stateCompleted
+  if (isAiThinking) return copy.stateAiReviewing
+  if (isRecording) return copy.stateRecording
+  if (isTranscribing) return copy.stateTranscribing
+  if (isQuestionAudioLoading) return copy.stateSpeaking
+  return copy.stateProgress
+}
+
+function CompletionSummary({ result, copy }) {
   return (
     <div className="completion-summary">
       <strong>{result?.overallScore ?? 0}/100</strong>
-      <span>Final interview score</span>
+      <span>{copy.finalScore}</span>
       <p>{result?.recommendation}</p>
     </div>
   )
 }
 
-function InterviewResultPanel({ result, onNavigate, onRestart }) {
+function InterviewResultPanel({ result, onNavigate, onRestart, copy }) {
   return (
     <section className="panel interview-result-panel" aria-label="Interview result">
       <div className="result-score-card">
-        <span>Final Score</span>
+        <span>{copy.finalScore}</span>
         <strong>{result.overallScore}<small>/100</small></strong>
         <p>{result.role}</p>
       </div>
 
       <div className="result-detail-grid">
-        <ResultList title="Strengths" items={result.strengths} />
-        <ResultList title="Needs Improvement" items={result.improvements} />
+        <ResultList title={copy.strengths} items={result.strengths} />
+        <ResultList title={copy.improvements} items={result.improvements} />
       </div>
 
       <div className="result-recommendation">
-        <h3>AI Recommendation</h3>
+        <h3>{copy.recommendation}</h3>
         <p>{result.recommendation}</p>
         <div className="result-actions">
           <button className="secondary-result-action" type="button" onClick={onRestart}>
             <Icon name="shuffle" />
-            New Interview
+            {copy.newInterview}
           </button>
-          <button className="primary-result-action" type="button" onClick={() => onNavigate('dashboard')}>
+          <button className="primary-result-action" type="button" onClick={() => onNavigate('result')}>
             <Icon name="chart" />
-            View Dashboard
+            {copy.fullResult}
           </button>
         </div>
       </div>
@@ -785,7 +1789,7 @@ function ResultList({ title, items }) {
   )
 }
 
-function InterviewSidebar({ currentPage, onNavigate, onLogout }) {
+function InterviewSidebar({ appCopy, currentPage, onNavigate, onLogout }) {
   return (
     <aside className="sidebar" aria-label="Main navigation">
       <div className="brand">
@@ -797,7 +1801,7 @@ function InterviewSidebar({ currentPage, onNavigate, onLogout }) {
       </div>
 
       <nav className="nav-menu">
-        <span className="nav-caption">Main Menu</span>
+        <span className="nav-caption">{appCopy.common.mainMenu}</span>
         {navItems.map((item) => (
           <button
             className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
@@ -806,24 +1810,24 @@ function InterviewSidebar({ currentPage, onNavigate, onLogout }) {
             onClick={() => onNavigate(item.id)}
           >
             <Icon name={item.icon} />
-            <span>{item.label}</span>
+            <span>{appCopy.nav[item.id] || item.label}</span>
           </button>
         ))}
 
-        <span className="nav-caption nav-caption-spaced">General</span>
+        <span className="nav-caption nav-caption-spaced">{appCopy.common.general}</span>
         <button className="nav-item" type="button" onClick={() => onNavigate('profile')}>
           <Icon name="user" />
-          <span>Profile</span>
+          <span>{appCopy.nav.profile}</span>
         </button>
-        <button className="nav-item" type="button">
+        <button className="nav-item" type="button" onClick={() => onNavigate('settings')}>
           <Icon name="settings" />
-          <span>Settings</span>
+          <span>{appCopy.nav.settings}</span>
         </button>
       </nav>
 
       <button className="logout-button" type="button" onClick={onLogout}>
         <Icon name="logout" />
-        Log Out
+        {appCopy.common.logOut}
       </button>
     </aside>
   )
@@ -839,16 +1843,77 @@ function ModeCard({ icon, title, text, active = false }) {
   )
 }
 
-function MessageBubble({ message }) {
+function BrowserVoicePicker({
+  copy,
+  activeLanguage,
+  voices,
+  selectedVoice,
+  selectedVoiceURI,
+  onChange,
+}) {
+  const hasVoices = voices.length > 0
+  const selectedValue = selectedVoiceURI || 'auto'
+
+  return (
+    <label className="browser-voice-picker">
+      <span>{copy.browserVoiceLabel}</span>
+      <select
+        value={selectedValue}
+        onChange={(event) => onChange(event.target.value)}
+        disabled={!hasVoices && activeLanguage !== 'vi'}
+      >
+        <option value="auto">{copy.autoVoice}</option>
+        {activeLanguage === 'vi' ? (
+          <option value={ONLINE_VIETNAMESE_VOICE_URI}>{copy.onlineVietnameseVoice}</option>
+        ) : null}
+        {voices.map((voice) => (
+          <option value={voice.voiceURI} key={`${voice.voiceURI}-${voice.name}-${voice.lang}`}>
+            {voice.name} ({voice.lang})
+          </option>
+        ))}
+      </select>
+      <small>
+        {selectedValue === ONLINE_VIETNAMESE_VOICE_URI
+          ? copy.onlineVietnameseVoice
+          : selectedVoice
+          ? `${selectedVoice.name} - ${selectedVoice.lang}`
+          : hasVoices || activeLanguage === 'vi'
+            ? copy.autoVoice
+            : copy.noVoiceAvailable}
+      </small>
+    </label>
+  )
+}
+
+function MessageBubble({ message, copy }) {
   return (
     <div className={`message-bubble ${message.sender}`}>
       <div className="message-meta">
-        <strong>{message.sender === 'ai' ? 'AI Interviewer' : 'You'}</strong>
-        {message.score ? <span>Score {message.score}/100</span> : null}
+        <strong>{message.sender === 'ai' ? copy.aiInterviewer : copy.userLabel}</strong>
+        {message.score ? <span>{copy.score} {message.score}/100</span> : null}
       </div>
       <p>{message.text}</p>
     </div>
   )
+}
+
+function getSpeechVoiceOptions(voices, activeLanguage) {
+  const languagePrefix = activeLanguage === 'vi' ? 'vi' : 'en'
+
+  return [...voices].sort((first, second) => {
+    const firstMatches = voiceMatchesLanguage(first, languagePrefix)
+    const secondMatches = voiceMatchesLanguage(second, languagePrefix)
+
+    if (firstMatches !== secondMatches) {
+      return firstMatches ? -1 : 1
+    }
+
+    return first.name.localeCompare(second.name)
+  })
+}
+
+function voiceMatchesLanguage(voice, languagePrefix) {
+  return String(voice?.lang || '').toLowerCase().startsWith(languagePrefix)
 }
 
 function createId() {
@@ -884,7 +1949,10 @@ function Icon({ name }) {
     volume: <path d="M4 10v4h4l5 4V6l-5 4zM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11" />,
     stop: <rect x="7" y="7" width="10" height="10" rx="1.5" />,
     send: <path d="M4 12 20 4l-5 16-3-7zM20 4l-8 9" />,
+    maximize: <path d="M8 3H3v5M21 8V3h-5M16 21h5v-5M3 16v5h5" />,
+    minimize: <path d="M8 3v5H3M16 3v5h5M21 16h-5v5M3 16h5v5" />,
     shuffle: <path d="M16 3h5v5M4 17h3.5c2.2 0 3.2-1.3 4.3-3.8l.4-.9C13.3 8.8 14.5 7 17 7h4M16 21h5v-5M4 7h3.5c1.8 0 2.9.9 3.8 2.7M14 15.3c.8 1.1 1.8 1.7 3 1.7h4" />,
+    search: <path d="m21 21-4.3-4.3M10.8 18a7.2 7.2 0 1 1 0-14.4 7.2 7.2 0 0 1 0 14.4z" />,
     logout: <path d="M10 17l5-5-5-5M15 12H3M21 4v16" />,
     arrowLeft: <path d="M15 18l-6-6 6-6" />,
   }

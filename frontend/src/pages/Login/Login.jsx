@@ -1,35 +1,245 @@
-import { useState } from 'react'
-import { demoAccounts, loginWithDemoAccount } from '../../services/authService.js'
+import { useEffect, useState } from 'react'
+import PreferenceControls from '../../components/PreferenceControls.jsx'
+import {
+  isCognitoConfigured,
+  prepareCognitoLogin,
+} from '../../services/authService.js'
+import { getAppCopy } from '../../services/i18n.js'
+import { normalizeLanguage } from '../../services/language.js'
+import neonBackground from '../../assets/cognito-branding/cognito-background-dark-neon.png'
+import neonLogo from '../../assets/cognito-branding/cognito-logo-dark-neon.png'
+import heroStack from '../../assets/cognito-branding/cognito-mark-dark-neon.png'
 import './Login.css'
 
-export default function Login({ onLogin = () => {} }) {
-  const [email, setEmail] = useState(demoAccounts[0].email)
-  const [password, setPassword] = useState(demoAccounts[0].password)
-  const [error, setError] = useState('')
-  const selectedAccount = demoAccounts.find((account) => account.email === email) ?? demoAccounts[0]
+const floatingNodes = [
+  { name: 'brain', style: 'node-a' },
+  { name: 'file', style: 'node-b' },
+  { name: 'mic', style: 'node-c' },
+  { name: 'graph', style: 'node-d' },
+  { name: 'shield', style: 'node-e' },
+  { name: 'database', style: 'node-f' },
+]
 
-  function handleSubmit(event) {
-    event.preventDefault()
-    setError('')
+const loginCopy = {
+  en: {
+    eyebrow: 'AI Interview Intelligence',
+    heroText: 'Upload CVs, generate technical interview rounds, evaluate answers, and review candidate talent signals through one secure AI workspace.',
+    secure: 'Secure AI Interview Workspace',
+    opening: 'Opening secure sign in...',
+    signIn: 'Sign in with Cognito',
+    preparing: 'Preparing secure sign in...',
+    viewWorkflow: 'View workflow',
+    notConfigured: 'Cognito is not configured yet.',
+    overviewEyebrow: 'Project Overview',
+    overviewTitle: 'An AI interview platform built on AWS Serverless architecture',
+    workflowEyebrow: 'Interview Flow',
+    workflowTitle: 'Steps to complete an AI interview round',
+    finalEyebrow: 'Final Output',
+    finalTitle: 'Results include CV score, interview score, and actionable feedback',
+    overallScore: 'Overall Interview Score',
+    ready: 'Ready for next round',
+    cvLabel: 'CV',
+    aiMatch: 'AI Match',
+    nodeLabels: {
+      brain: 'AI',
+      file: 'CV',
+      mic: 'Voice',
+      graph: 'Graph',
+      shield: 'Auth',
+      database: 'Data',
+    },
+    overviewText: 'Vertex-IntervAI / Talent Graph AI helps candidates practice interviews from a real CV: upload a resume, analyze it with AI, generate personalized interview rounds, score answers, and save history to track progress.',
+    projectHighlights: [
+      {
+        value: 'AWS',
+        label: 'Serverless backend',
+        text: 'Lambda, API Gateway, S3, DynamoDB, Bedrock, Polly, Transcribe, Cognito.',
+      },
+      {
+        value: 'AI',
+        label: 'CV and interview intelligence',
+        text: 'Analyze CVs, generate interview questions, evaluate answers, and return actionable feedback.',
+      },
+      {
+        value: 'Role',
+        label: 'User/Admin workflow',
+        text: 'Candidates complete interviews while admins monitor users, CVs, interviews, and review queues.',
+      },
+    ],
+    workflowText: 'The main flow guides candidates from the first CV upload to the final evaluation without requiring complex technical setup.',
+    workflowSteps: [
+      {
+        icon: 'upload',
+        step: '01',
+        title: 'Upload CV',
+        text: 'Candidates sign in with Cognito and upload a CV. The file is stored in S3, while metadata is saved in DynamoDB.',
+      },
+      {
+        icon: 'sparkles',
+        step: '02',
+        title: 'AI analyzes the CV',
+        text: 'Lambda reads the CV from S3 and calls Amazon Bedrock to extract skills, projects, CV score, and suggested roles.',
+      },
+      {
+        icon: 'mic',
+        step: '03',
+        title: 'Interview with AI',
+        text: 'The system generates role-based interview questions. Polly can read each question aloud for a realistic interview flow.',
+      },
+      {
+        icon: 'message',
+        step: '04',
+        title: 'Answer questions',
+        text: 'Candidates answer by typing or recording audio. Transcribe converts audio into text before evaluation.',
+      },
+      {
+        icon: 'chart',
+        step: '05',
+        title: 'Review results',
+        text: 'Bedrock or the fallback evaluator scores answers, stores attempts, updates the overall score, and shows interview history.',
+      },
+    ],
+    resultText: 'After completing the interview, users can review the total score, answered questions, feedback, strengths, improvement areas, and DynamoDB-synced history.',
+  },
+  vi: {
+    eyebrow: 'Trí tuệ phỏng vấn AI',
+    heroText: 'Tải CV lên, tạo vòng phỏng vấn kỹ thuật, chấm câu trả lời và xem lại tín hiệu năng lực ứng viên trong một không gian AI bảo mật.',
+    secure: 'Không gian phỏng vấn AI bảo mật',
+    opening: 'Đang mở đăng nhập bảo mật...',
+    signIn: 'Đăng nhập bằng Cognito',
+    preparing: 'Đang chuẩn bị đăng nhập...',
+    viewWorkflow: 'Xem workflow',
+    notConfigured: 'Cognito chưa được cấu hình.',
+    overviewEyebrow: 'Tổng quan đồ án',
+    overviewTitle: 'Nền tảng phỏng vấn AI xây trên AWS Serverless',
+    workflowEyebrow: 'Luồng phỏng vấn',
+    workflowTitle: 'Các bước hoàn thành một vòng phỏng vấn AI',
+    finalEyebrow: 'Kết quả cuối',
+    finalTitle: 'Kết quả gồm điểm CV, điểm phỏng vấn và nhận xét có thể hành động',
+    overallScore: 'Điểm phỏng vấn tổng',
+    ready: 'Sẵn sàng cho vòng tiếp theo',
+    cvLabel: 'CV',
+    aiMatch: 'Độ khớp AI',
+    nodeLabels: {
+      brain: 'AI',
+      file: 'CV',
+      mic: 'Giọng nói',
+      graph: 'Biểu đồ',
+      shield: 'Xác thực',
+      database: 'Dữ liệu',
+    },
+    overviewText: 'Vertex-IntervAI / Talent Graph AI giúp ứng viên luyện phỏng vấn từ CV thật: tải hồ sơ lên, phân tích bằng AI, tạo vòng phỏng vấn cá nhân hóa, chấm câu trả lời và lưu lịch sử để theo dõi tiến bộ.',
+    projectHighlights: [
+      {
+        value: 'AWS',
+        label: 'Backend không máy chủ',
+        text: 'Lambda, API Gateway, S3, DynamoDB, Bedrock, Polly, Transcribe và Cognito.',
+      },
+      {
+        value: 'AI',
+        label: 'Phân tích CV và phỏng vấn',
+        text: 'Phân tích CV, tạo câu hỏi phỏng vấn, đánh giá câu trả lời và trả về nhận xét có thể áp dụng.',
+      },
+      {
+        value: 'Vai trò',
+        label: 'Luồng người dùng/admin',
+        text: 'Ứng viên hoàn thành phỏng vấn, quản trị viên theo dõi người dùng, CV, cuộc phỏng vấn và hàng đợi đánh giá.',
+      },
+    ],
+    workflowText: 'Luồng chính dẫn ứng viên từ bước upload CV đầu tiên đến kết quả đánh giá cuối cùng mà không cần thao tác kỹ thuật phức tạp.',
+    workflowSteps: [
+      {
+        icon: 'upload',
+        step: '01',
+        title: 'Tải CV lên',
+        text: 'Ứng viên đăng nhập bằng Cognito và tải CV lên. Tệp được lưu trong S3, metadata được lưu trong DynamoDB.',
+      },
+      {
+        icon: 'sparkles',
+        step: '02',
+        title: 'AI phân tích CV',
+        text: 'Lambda đọc CV từ S3 và gọi Amazon Bedrock để trích xuất kỹ năng, dự án, điểm CV và role gợi ý.',
+      },
+      {
+        icon: 'mic',
+        step: '03',
+        title: 'Phỏng vấn với AI',
+        text: 'Hệ thống tạo câu hỏi theo vai trò. Polly có thể đọc từng câu hỏi để tạo cảm giác phỏng vấn thực tế.',
+      },
+      {
+        icon: 'message',
+        step: '04',
+        title: 'Trả lời câu hỏi',
+        text: 'Ứng viên trả lời bằng cách gõ hoặc ghi âm. Transcribe chuyển âm thanh thành văn bản trước khi đánh giá.',
+      },
+      {
+        icon: 'chart',
+        step: '05',
+        title: 'Xem kết quả',
+        text: 'Bedrock hoặc bộ chấm dự phòng sẽ chấm điểm, lưu lượt trả lời, cập nhật điểm tổng và hiển thị lịch sử.',
+      },
+    ],
+    resultText: 'Sau khi hoàn thành phỏng vấn, người dùng có thể xem điểm tổng, câu đã trả lời, nhận xét, điểm mạnh, phần cần cải thiện và lịch sử đồng bộ DynamoDB.',
+  },
+}
 
-    try {
-      const user = loginWithDemoAccount(email, password)
-      onLogin(user)
-    } catch (loginError) {
-      setError(loginError.message)
+export default function Login({
+  authError = '',
+  language = 'en',
+  colorTheme = 'black',
+  onLanguageChange = () => {},
+  onThemeChange = () => {},
+}) {
+  const activeLanguage = normalizeLanguage(language)
+  const copy = loginCopy[activeLanguage]
+  const appCopy = getAppCopy(activeLanguage)
+  const [error, setError] = useState(authError)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [preparedLoginUrl, setPreparedLoginUrl] = useState('')
+  const canUseCognito = isCognitoConfigured()
+
+  useEffect(() => {
+    if (authError) {
+      setError(authError)
     }
-  }
+  }, [authError])
 
-  function fillAccount(account) {
-    setEmail(account.email)
-    setPassword(account.password)
-    setError('')
-  }
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadPreparedLoginUrl() {
+      if (!canUseCognito) {
+        return
+      }
+
+      try {
+        const loginUrl = await prepareCognitoLogin()
+
+        if (isMounted) {
+          setPreparedLoginUrl(loginUrl)
+        }
+      } catch (loginError) {
+        if (isMounted) {
+          setError(loginError.message)
+        }
+      }
+    }
+
+    loadPreparedLoginUrl()
+
+    return () => {
+      isMounted = false
+    }
+  }, [canUseCognito])
 
   return (
     <main className="login-page">
-      <section className="login-shell">
-        <div className="login-brand-panel">
+      <div className="login-grid-bg" aria-hidden="true" />
+      <div className="login-orbit login-orbit-one" aria-hidden="true" />
+      <div className="login-orbit login-orbit-two" aria-hidden="true" />
+
+      <div className="login-landing">
+        <section className="login-hero" aria-label="Vertex-IntervAI sign in">
           <div className="login-brand">
             <div className="login-mark"><Icon name="brain" /></div>
             <div>
@@ -38,69 +248,150 @@ export default function Login({ onLogin = () => {} }) {
             </div>
           </div>
 
-          <div className="login-copy">
-            <p className="login-eyebrow">Secure Workspace</p>
-            <h1>Sign in to continue your AI interview workflow</h1>
-            <p>Role-aware access for candidate practice and admin review.</p>
+          <div className="login-preference-row">
+            <PreferenceControls
+              colorTheme={colorTheme}
+              language={activeLanguage}
+              onLanguageChange={onLanguageChange}
+              onThemeChange={onThemeChange}
+            />
           </div>
 
-          <div className="role-preview">
-            <span className={`role-badge ${selectedAccount.role}`}>{selectedAccount.role}</span>
-            <strong>{selectedAccount.fullName}</strong>
-            <small>{selectedAccount.email}</small>
+          <div className="login-copy">
+            <p className="login-eyebrow">{copy.eyebrow}</p>
+            <h1>Vertex-IntervAI</h1>
+            <p>{copy.heroText}</p>
           </div>
+
+          <div className="login-actions">
+            {error ? <p className="login-error">{error}</p> : null}
+            {!canUseCognito ? (
+              <p className="login-error">{copy.notConfigured}</p>
+            ) : null}
+            <div className="login-action-row">
+              <a
+                className={`login-submit ${!preparedLoginUrl || isRedirecting ? 'disabled' : ''}`}
+                href={preparedLoginUrl || undefined}
+                onClick={(event) => {
+                  if (!preparedLoginUrl || isRedirecting) {
+                    event.preventDefault()
+                    return
+                  }
+
+                  setIsRedirecting(true)
+                }}
+              >
+                <Icon name="login" />
+                {isRedirecting
+                  ? copy.opening
+                  : preparedLoginUrl
+                    ? copy.signIn
+                    : copy.preparing}
+              </a>
+              <a className="login-scroll-link" href="#project-overview">
+                <Icon name="arrowDown" />
+                {copy.viewWorkflow}
+              </a>
+            </div>
+          </div>
+        </section>
+
+        <section className="login-visual" aria-hidden="true">
+          <div className="login-core">
+            <img src={heroStack} alt="" />
+            <div className="core-pulse" />
+          </div>
+
+          <div className="signal-panel signal-panel-top">
+            <span>{copy.cvLabel}</span>
+            <strong>84</strong>
+          </div>
+          <div className="signal-panel signal-panel-bottom">
+            <span>{copy.aiMatch}</span>
+            <strong>92%</strong>
+          </div>
+
+          {floatingNodes.map((node) => (
+            <div className={`floating-node ${node.style}`} key={node.name}>
+              <Icon name={node.name} />
+              <span>{copy.nodeLabels[node.name]}</span>
+            </div>
+          ))}
+        </section>
+      </div>
+
+      <section className="project-section project-intro-section" id="project-overview">
+        <div className="project-section-header">
+          <p className="login-eyebrow">{copy.overviewEyebrow}</p>
+          <h2>{copy.overviewTitle}</h2>
+          <p>{copy.overviewText}</p>
         </div>
 
-        <form className="login-form-panel" onSubmit={handleSubmit}>
-          <div className="login-form-header">
-            <p>Account Login</p>
-            <h2>Welcome back</h2>
+        <div className="project-overview-grid">
+          <div className="project-media-frame">
+            <img src={neonBackground} alt="Talent Graph AI network interface" />
+            <div className="project-media-overlay">
+              <img src={neonLogo} alt="Vertex-IntervAI neon logo" />
+              <span>{copy.secure}</span>
+            </div>
           </div>
 
-          <label className="login-field">
-            <span>Email</span>
-            <input
-              type="email"
-              value={email}
-              autoComplete="email"
-              onChange={(event) => setEmail(event.target.value)}
-            />
-          </label>
-
-          <label className="login-field">
-            <span>Password</span>
-            <input
-              type="password"
-              value={password}
-              autoComplete="current-password"
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </label>
-
-          {error ? <p className="login-error">{error}</p> : null}
-
-          <button className="login-submit" type="submit">
-            <Icon name="login" />
-            Sign In
-          </button>
-
-          <div className="demo-account-list" aria-label="Demo accounts">
-            {demoAccounts.map((account) => (
-              <button
-                className={`demo-account ${account.role}`}
-                type="button"
-                key={account.email}
-                onClick={() => fillAccount(account)}
-              >
-                <span>{account.initials}</span>
-                <div>
-                  <strong>{account.role === 'admin' ? 'Admin' : 'User'}</strong>
-                  <small>{account.email}</small>
-                </div>
-              </button>
+          <div className="project-highlight-grid">
+            {copy.projectHighlights.map((item) => (
+              <article className="project-highlight-card" key={item.label}>
+                <strong>{item.value}</strong>
+                <h3>{item.label}</h3>
+                <p>{item.text}</p>
+              </article>
             ))}
           </div>
-        </form>
+        </div>
+      </section>
+
+      <section className="project-section workflow-section" aria-labelledby="workflow-title">
+        <div className="project-section-header workflow-header">
+          <p className="login-eyebrow">{copy.workflowEyebrow}</p>
+          <h2 id="workflow-title">{copy.workflowTitle}</h2>
+          <p>{copy.workflowText}</p>
+        </div>
+
+        <div className="workflow-rail">
+          {copy.workflowSteps.map((item) => (
+            <article className="workflow-card" key={item.step}>
+              <span className="workflow-number">{item.step}</span>
+              <div className="workflow-icon"><Icon name={item.icon} /></div>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="project-section result-section" aria-label="Interview result preview">
+        <div className="result-copy">
+          <p className="login-eyebrow">{copy.finalEyebrow}</p>
+          <h2>{copy.finalTitle}</h2>
+          <p>{copy.resultText}</p>
+        </div>
+
+        <div className="result-preview-panel">
+          <div className="result-score-card">
+            <span>{copy.overallScore}</span>
+            <strong>86<small>/100</small></strong>
+            <em>{copy.ready}</em>
+          </div>
+          <div className="result-bars" aria-hidden="true">
+            <span style={{ '--bar-width': '92%' }} />
+            <span style={{ '--bar-width': '78%' }} />
+            <span style={{ '--bar-width': '86%' }} />
+          </div>
+          <div className="result-mini-flow">
+            <span><Icon name="file" /> CV</span>
+            <span><Icon name="brain" /> AI</span>
+            <span><Icon name="mic" /> {appCopy.nav.interview}</span>
+            <span><Icon name="chart" /> {appCopy.nav.result}</span>
+          </div>
+        </div>
       </section>
     </main>
   )
@@ -109,7 +400,17 @@ export default function Login({ onLogin = () => {} }) {
 function Icon({ name }) {
   const paths = {
     brain: <path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0 0 6v1a3 3 0 0 0 5 2.2M15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 0 6v1a3 3 0 0 1-5 2.2M12 5v14M8 10h3M13 10h3M8 15h3M13 15h3" />,
+    file: <path d="M7 3h7l4 4v14H7zM14 3v5h5M9 13h6M9 17h4" />,
+    mic: <path d="M12 3a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v3M9 21h6" />,
+    graph: <path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16V7" />,
+    shield: <path d="M12 3 20 6v6c0 5-3.4 8.2-8 9-4.6-.8-8-4-8-9V6zM9 12l2 2 4-4" />,
+    database: <path d="M5 6c0-1.7 3.1-3 7-3s7 1.3 7 3-3.1 3-7 3-7-1.3-7-3zM5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6" />,
     login: <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" />,
+    upload: <path d="M12 16V4M7 9l5-5 5 5M5 20h14" />,
+    sparkles: <path d="M12 3l1.4 4.2L18 9l-4.6 1.8L12 15l-1.4-4.2L6 9l4.6-1.8zM19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8zM5 14l.7 1.8L8 16.5l-2.3.7L5 19l-.7-1.8L2 16.5l2.3-.7z" />,
+    message: <path d="M5 5h14v10H8l-4 4V5zM8 9h8M8 12h5" />,
+    chart: <path d="M4 19V5M4 19h16M8 16v-5M12 16V8M16 16V7" />,
+    arrowDown: <path d="M12 5v14M6 13l6 6 6-6" />,
   }
 
   return (

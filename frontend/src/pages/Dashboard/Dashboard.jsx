@@ -1,6 +1,9 @@
+import { useEffect, useMemo, useState } from 'react'
+import PreferenceControls from '../../components/PreferenceControls.jsx'
 import { formatFileSize, formatUploadDate } from '../../services/cvStorage.js'
+import { getAppCopy } from '../../services/i18n.js'
 import { formatInterviewDate } from '../../services/interviewStorage.js'
-import heroArtwork from '../../assets/hero.png'
+import heroArtwork from '../../assets/image_processing20250122-990885-hel775.gif'
 import './Dashboard.css'
 
 const navItems = [
@@ -14,35 +17,31 @@ const navItems = [
 ]
 
 const fallbackCvAnalysis = {
-  fileName: 'Nguyen-Huy-Dat-CV.pdf',
-  fileSize: 428000,
-  uploadedAt: '2026-07-03T00:00:00.000Z',
-  cvScore: 92,
-  suggestedPosition: 'Frontend Developer Intern',
+  fileName: 'No CV uploaded yet',
+  fileSize: 0,
+  uploadedAt: '',
+  cvScore: 0,
+  suggestedPosition: 'Upload CV to get a suggested role',
   recommendation:
-    'You show strong frontend fundamentals. Improve AWS Lambda error handling, DynamoDB query design, and concise system design answers before your next technical interview.',
-  skills: ['React', 'Python', 'AWS Lambda', 'DynamoDB'],
+    'Upload a CV first so Vertex-IntervAI can extract skills, calculate a CV score, and prepare interview questions for this account.',
+  skills: [],
   talentScores: [
-    { label: 'React', score: 88 },
-    { label: 'Python', score: 76 },
-    { label: 'AWS', score: 72 },
-    { label: 'Database', score: 68 },
-    { label: 'Communication', score: 82 },
-    { label: 'Problem Solving', score: 79 },
+    { label: 'Frontend', score: 0 },
+    { label: 'Backend', score: 0 },
+    { label: 'Cloud', score: 0 },
+    { label: 'Database', score: 0 },
+    { label: 'Communication', score: 0 },
+    { label: 'Problem Solving', score: 0 },
   ],
   skillGroups: [
-    { label: 'Frontend', value: 88, skills: 'React, Vite, Tailwind', tone: 'purple' },
-    { label: 'Backend', value: 76, skills: 'Python, Lambda APIs', tone: 'blue' },
-    { label: 'Cloud', value: 72, skills: 'S3, Bedrock, DynamoDB', tone: 'orange' },
-    { label: 'Communication', value: 82, skills: 'Clear answers, steady flow', tone: 'green' },
+    { label: 'Frontend', value: 0, skills: 'Waiting for CV analysis', tone: 'purple' },
+    { label: 'Backend', value: 0, skills: 'Waiting for CV analysis', tone: 'blue' },
+    { label: 'Cloud', value: 0, skills: 'Waiting for CV analysis', tone: 'orange' },
+    { label: 'Communication', value: 0, skills: 'Waiting for interview result', tone: 'green' },
   ],
 }
 
-const interviews = [
-  { role: 'Frontend Developer', date: 'Jul 03, 2026', score: 78, status: 'Completed' },
-  { role: 'Backend Python', date: 'Jun 28, 2026', score: 84, status: 'Completed' },
-  { role: 'Cloud Engineer', date: 'Jun 21, 2026', score: 73, status: 'Review' },
-]
+const interviews = []
 
 const actions = [
   { label: 'Upload CV', icon: 'upload', tone: 'purple', page: 'upload-cv' },
@@ -56,31 +55,49 @@ const fallbackUser = {
   role: 'user',
 }
 
+const VISIBLE_CV_LIMIT = 3
+
 export default function Dashboard({
   cvAnalysis,
   cvHistory = [],
   interviewResult,
   interviewHistory = [],
   currentUser = fallbackUser,
+  language = 'en',
+  colorTheme = 'black',
+  onLanguageChange = () => {},
+  onThemeChange = () => {},
   onNavigate = () => {},
   onLogout = () => {},
+  onDeleteCv = () => {},
 }) {
-  const hasUploadedCv = Boolean(cvAnalysis)
-  const analysis = cvAnalysis ?? fallbackCvAnalysis
-  const mergedInterviewHistory = mergeLatestInterview(interviewHistory, interviewResult)
-  const latestInterviewScore = mergedInterviewHistory[0]?.overallScore ?? 0
+  const appCopy = getAppCopy(language)
+  const copy = appCopy.dashboard
+  const cvRows = useMemo(() => mergeLatestCv(cvHistory, cvAnalysis), [cvHistory, cvAnalysis])
+  const [selectedCvKey, setSelectedCvKey] = useState(() => getCvKey(cvRows[0] || cvAnalysis))
+  const [showAllCvs, setShowAllCvs] = useState(false)
+  const selectedCv = cvRows.find((item) => getCvKey(item) === selectedCvKey) || cvRows[0] || cvAnalysis
+  const hasUploadedCv = Boolean(selectedCv)
+  const analysis = normalizeDashboardAnalysis(selectedCv)
+  const mergedInterviewHistory = useMemo(
+    () => mergeLatestInterview(interviewHistory, interviewResult),
+    [interviewHistory, interviewResult],
+  )
+  const selectedInterviewHistory = filterInterviewsForCv(mergedInterviewHistory, analysis)
+  const latestInterviewScore = selectedInterviewHistory[0]?.overallScore ?? 0
   const averageScore = latestInterviewScore ? Math.round((analysis.cvScore + latestInterviewScore) / 2) : analysis.cvScore
-  const interviewRows = mergedInterviewHistory.length
+  const interviewRows = selectedInterviewHistory.length
     ? [
-      ...mergedInterviewHistory.slice(0, 3).map((interview) => ({
+      ...selectedInterviewHistory.slice(0, 3).map((interview) => ({
         role: interview.role,
         date: formatInterviewDate(interview.completedAt),
         score: interview.overallScore,
-        status: interview.status || 'Completed',
+        status: interview.status || copy.table[3],
       })),
     ]
     : interviewResult
-    ? [
+      && shouldShowFallbackInterview(interviewResult, analysis)
+      ? [
       {
         role: interviewResult.role,
         date: formatInterviewDate(interviewResult.completedAt),
@@ -91,64 +108,89 @@ export default function Dashboard({
     ]
     : interviews
   const firstName = currentUser.fullName?.split(' ')[0] ?? 'Candidate'
-  const cvCount = mergeLatestCv(cvHistory, cvAnalysis).length
-  const completedInterviewCount = mergedInterviewHistory.length
-  const readinessLabel = getReadinessLabel(averageScore)
+  const cvCount = cvRows.length
+  const visibleCvRows = showAllCvs ? cvRows : cvRows.slice(0, VISIBLE_CV_LIMIT)
+  const hiddenCvCount = Math.max(0, cvRows.length - VISIBLE_CV_LIMIT)
+  const completedInterviewCount = selectedInterviewHistory.length
+  const readinessLabel = getReadinessLabel(averageScore, copy)
   const stats = [
-    { label: 'CV Score', value: String(analysis.cvScore), suffix: '/100', icon: 'file', tone: 'purple' },
-    { label: 'Latest Interview', value: String(latestInterviewScore), suffix: '/100', icon: 'mic', tone: 'green' },
-    { label: 'Completed Interviews', value: String(completedInterviewCount), suffix: '', icon: 'check', tone: 'orange' },
-    { label: 'Average Score', value: String(averageScore), suffix: '/100', icon: 'chart', tone: 'blue' },
+    { label: copy.stats[0], value: String(analysis.cvScore), suffix: '/100', icon: 'file', tone: 'purple' },
+    { label: copy.stats[1], value: String(latestInterviewScore), suffix: '/100', icon: 'mic', tone: 'green' },
+    { label: copy.stats[2], value: String(completedInterviewCount), suffix: '', icon: 'check', tone: 'orange' },
+    { label: copy.stats[3], value: String(averageScore), suffix: '/100', icon: 'chart', tone: 'blue' },
   ]
+
+  useEffect(() => {
+    const latestKey = getCvKey(cvRows[0] || cvAnalysis)
+
+    if (!cvRows.length) {
+      setSelectedCvKey('')
+      setShowAllCvs(false)
+      return
+    }
+
+    setSelectedCvKey((currentKey) => (
+      currentKey && cvRows.some((item) => getCvKey(item) === currentKey)
+        ? currentKey
+        : latestKey
+    ))
+  }, [cvRows, cvAnalysis])
 
   return (
     <div className="dashboard-page">
       <div className="dashboard-frame">
-        <Sidebar currentPage="dashboard" onNavigate={onNavigate} onLogout={onLogout} />
+        <Sidebar appCopy={appCopy} currentPage="dashboard" onNavigate={onNavigate} onLogout={onLogout} />
 
         <main className="dashboard-main">
-          <Topbar currentUser={currentUser} />
+          <Topbar
+            appCopy={appCopy}
+            colorTheme={colorTheme}
+            currentUser={currentUser}
+            language={language}
+            onLanguageChange={onLanguageChange}
+            onThemeChange={onThemeChange}
+          />
 
           <div className="dashboard-content">
             <section className="hero-panel" aria-label="Dashboard overview">
               <div className="hero-copy">
-                <p className="eyebrow">AI Technical Interview Platform</p>
-                <h1>Welcome back, {firstName}</h1>
+                <p className="eyebrow">{copy.heroEyebrow}</p>
+                <h1>{copy.welcome(firstName)}</h1>
                 <p>
                   {hasUploadedCv
-                    ? 'Your uploaded CV is ready for interview generation. Start a focused AI mock interview or review the latest skill assessment.'
-                    : 'Upload your CV to generate interview questions, skill analysis, and a personalized Talent Graph.'}
+                    ? copy.heroReady
+                    : copy.heroEmpty}
                 </p>
                 <div className="hero-actions">
                   <button className="primary-action" type="button" onClick={() => onNavigate('interview')}>
                     <Icon name="play" />
-                    Start Interview
+                    {appCopy.common.startInterview}
                   </button>
                   <button className="secondary-action" type="button" onClick={() => onNavigate('upload-cv')}>
                     <Icon name="upload" />
-                    Upload New CV
+                    {copy.uploadNewCv}
                   </button>
                 </div>
 
                 <div className="workflow-strip" aria-label="Interview workflow status">
-                  <WorkflowStep icon="file" label="CV Parsed" status={hasUploadedCv ? 'Done' : 'Demo'} active />
-                  <WorkflowStep icon="brain" label="Questions" status="Ready" active={hasUploadedCv} />
-                  <WorkflowStep icon="mic" label="Voice Round" status={interviewResult ? 'Done' : 'Next'} active={Boolean(interviewResult)} />
-                  <WorkflowStep icon="chart" label="Talent Graph" status={interviewResult ? 'Updated' : 'After'} active={Boolean(interviewResult)} />
+                  <WorkflowStep icon="file" label={copy.workflow[0][0]} status={hasUploadedCv ? copy.workflow[0][1] : copy.workflow[0][2]} active />
+                  <WorkflowStep icon="brain" label={copy.workflow[1][0]} status={copy.workflow[1][1]} active={hasUploadedCv} />
+                  <WorkflowStep icon="mic" label={copy.workflow[2][0]} status={latestInterviewScore ? copy.workflow[2][1] : copy.workflow[2][2]} active={Boolean(latestInterviewScore)} />
+                  <WorkflowStep icon="chart" label={copy.workflow[3][0]} status={latestInterviewScore ? copy.workflow[3][1] : copy.workflow[3][2]} active={Boolean(latestInterviewScore)} />
                 </div>
               </div>
 
               <div className="hero-visual" aria-label="Candidate readiness overview">
                 <img src={heroArtwork} alt="" />
                 <div className="hero-score-card">
-                  <span>Readiness</span>
+                  <span>{copy.readiness}</span>
                   <strong>{averageScore}<small>/100</small></strong>
                   <p>{readinessLabel}</p>
                 </div>
                 <div className="hero-role-card">
-                  <span>Suggested role</span>
+                  <span>{copy.suggestedRole}</span>
                   <strong>{analysis.suggestedPosition}</strong>
-                  <small>{cvCount || 1} CV analysis saved</small>
+                  <small>{copy.cvSaved(cvCount)}</small>
                 </div>
               </div>
             </section>
@@ -162,8 +204,8 @@ export default function Dashboard({
             <div className="dashboard-grid">
               <section className="panel talent-panel">
                 <PanelHeader
-                  title="Talent Graph"
-                  description="Skill assessment based on CV analysis and recent interviews."
+                  title={copy.talentTitle}
+                  description={copy.talentDescription}
                 />
                 <div className="talent-layout">
                   <RadarChart data={analysis.talentScores} />
@@ -177,7 +219,7 @@ export default function Dashboard({
 
               <aside className="right-rail">
                 <section className="panel score-panel">
-                  <PanelHeader title="Assessment Score" description="Latest AI evaluation" />
+                  <PanelHeader title={copy.scoreTitle} description={copy.scoreDescription} />
                   <div className="score-rings">
                     <ScoreRing label="CV" value={analysis.cvScore} color="#7c3aed" />
                     <ScoreRing label="Interview" value={latestInterviewScore} color="#10b981" />
@@ -186,18 +228,70 @@ export default function Dashboard({
 
                 <section className="panel cv-panel">
                   <PanelHeader
-                    title="CV Status"
-                    description={hasUploadedCv ? 'Last uploaded CV' : 'Demo data shown until upload'}
+                    title={copy.cvStatusTitle}
+                    description={copy.cvStatusDescription(cvCount)}
                   />
-                  <div className="cv-file">
-                    <div className="file-icon"><Icon name="file" /></div>
-                    <div>
-                      <strong>{analysis.fileName}</strong>
-                      <span>
-                        {formatUploadDate(analysis.uploadedAt)} / {formatFileSize(analysis.fileSize)}
-                      </span>
-                    </div>
+                  <div className="cv-list" aria-label="Saved CV analyses">
+                    {visibleCvRows.length ? (
+                      visibleCvRows.map((item) => {
+                        const itemKey = getCvKey(item)
+                        const isActive = itemKey === getCvKey(analysis)
+
+                        return (
+                          <article
+                            className={`cv-file ${isActive ? 'active' : ''}`}
+                            key={itemKey}
+                          >
+                            <button
+                              className="cv-select-button"
+                              type="button"
+                              onClick={() => setSelectedCvKey(itemKey)}
+                              aria-pressed={isActive}
+                            >
+                              <div className="file-icon"><Icon name="file" /></div>
+                              <div className="cv-file-copy">
+                                <strong>{item.fileName || copy.uploadedCv}</strong>
+                                <span>
+                                  {formatUploadDate(getCvDate(item))} / {formatFileSize(item.fileSize)}
+                                </span>
+                              </div>
+                              <em>{Number(item.cvScore || 0)}/100</em>
+                            </button>
+                            <button
+                              className="cv-delete-button"
+                              type="button"
+                              aria-label={`${appCopy.common.delete} ${item.fileName || copy.uploadedCv}`}
+                              title={appCopy.common.delete}
+                              onClick={() => handleDeleteCv(item, onDeleteCv, copy)}
+                            >
+                              <Icon name="trash" />
+                            </button>
+                          </article>
+                        )
+                      })
+                    ) : (
+                      <div className="cv-file empty">
+                        <div className="file-icon"><Icon name="file" /></div>
+                        <div className="cv-file-copy">
+                          <strong>{analysis.fileName}</strong>
+                          <span>{copy.cvEmpty}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
+
+                  {hiddenCvCount > 0 ? (
+                    <button
+                      className="cv-toggle-button"
+                      type="button"
+                      onClick={() => setShowAllCvs((current) => !current)}
+                      aria-expanded={showAllCvs}
+                    >
+                      <Icon name={showAllCvs ? 'chevronUp' : 'chevronDown'} />
+                      {showAllCvs ? copy.showFewer : copy.showMore(hiddenCvCount)}
+                    </button>
+                  ) : null}
+
                   <div className="tag-list" aria-label="Extracted skills">
                     {analysis.skills.slice(0, 6).map((skill) => (
                       <span key={skill}>{skill}</span>
@@ -207,23 +301,18 @@ export default function Dashboard({
               </aside>
 
               <section className="panel recommendation-panel">
-                <PanelHeader title="AI Recommendation" description="Suggested focus before the next round" />
+                <PanelHeader title={copy.recommendationTitle} description={copy.recommendationDescription} />
                 <p>{analysis.recommendation}</p>
                 <div className="focus-list">
-                  <span>Lambda API patterns</span>
-                  <span>DynamoDB indexes</span>
-                  <span>Behavioral answer structure</span>
+                  {copy.focusItems.map((item) => <span key={item}>{item}</span>)}
                 </div>
               </section>
 
               <section className="panel history-panel">
-                <PanelHeader title="Recent Interviews" description="Latest completed mock interviews" />
+                <PanelHeader title={copy.recentTitle} description={copy.recentDescription} />
                 <div className="interview-table" role="table" aria-label="Recent interviews">
                   <div className="table-row table-head" role="row">
-                    <span role="columnheader">Position</span>
-                    <span role="columnheader">Date</span>
-                    <span role="columnheader">Score</span>
-                    <span role="columnheader">Status</span>
+                    {copy.table.map((item) => <span role="columnheader" key={item}>{item}</span>)}
                   </div>
                   {interviewRows.map((interview) => (
                     <div className="table-row" role="row" key={`${interview.role}-${interview.date}`}>
@@ -241,9 +330,9 @@ export default function Dashboard({
               </section>
 
               <section className="panel quick-panel">
-                <PanelHeader title="Quick Actions" description="Continue the main workflow" />
+                <PanelHeader title={copy.quickTitle} description={copy.quickDescription} />
                 <div className="action-list">
-                  {actions.map((action) => (
+                  {actions.map((action, index) => (
                     <button
                       className={`action-button ${action.tone}`}
                       type="button"
@@ -251,7 +340,7 @@ export default function Dashboard({
                       onClick={() => onNavigate(action.page)}
                     >
                       <Icon name={action.icon} />
-                      <span>{action.label}</span>
+                      <span>{copy.actions[index] || action.label}</span>
                     </button>
                   ))}
                 </div>
@@ -271,8 +360,8 @@ function mergeLatestCv(items, latest) {
     return source
   }
 
-  const key = latest.cvId || latest.fileName
-  return [latest, ...source.filter((item) => (item.cvId || item.fileName) !== key)]
+  const key = getCvKey(latest)
+  return [latest, ...source.filter((item) => getCvKey(item) !== key)]
 }
 
 function mergeLatestInterview(items, latest) {
@@ -286,14 +375,93 @@ function mergeLatestInterview(items, latest) {
   return [latest, ...source.filter((item) => (item.interviewId || item.completedAt) !== key)]
 }
 
-function getReadinessLabel(score) {
-  if (score >= 85) return 'Strong candidate'
-  if (score >= 70) return 'Ready to practice'
-  if (score > 0) return 'Needs more practice'
-  return 'Upload CV to begin'
+function normalizeDashboardAnalysis(item) {
+  if (!item) {
+    return fallbackCvAnalysis
+  }
+
+  return {
+    ...fallbackCvAnalysis,
+    ...item,
+    cvScore: Number(item.cvScore || 0),
+    fileSize: Number(item.fileSize || 0),
+    uploadedAt: getCvDate(item),
+    skills: normalizeStringList(item.skills, fallbackCvAnalysis.skills),
+    talentScores: normalizeTalentScores(item.talentScores),
+    skillGroups: normalizeSkillGroups(item.skillGroups),
+    recommendation: item.recommendation || fallbackCvAnalysis.recommendation,
+    suggestedPosition: item.suggestedPosition || fallbackCvAnalysis.suggestedPosition,
+  }
 }
 
-function Sidebar({ currentPage, onNavigate, onLogout }) {
+function normalizeStringList(value, fallback) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === 'string' && item.trim()) : fallback
+}
+
+function normalizeTalentScores(value) {
+  if (!Array.isArray(value) || !value.length) {
+    return fallbackCvAnalysis.talentScores
+  }
+
+  return value.map((item) => ({
+    label: item.label || 'Skill',
+    score: Number(item.score || 0),
+  }))
+}
+
+function normalizeSkillGroups(value) {
+  if (!Array.isArray(value) || !value.length) {
+    return fallbackCvAnalysis.skillGroups
+  }
+
+  return value.map((item, index) => ({
+    label: item.label || `Group ${index + 1}`,
+    value: Number(item.value || item.score || 0),
+    skills: item.skills || 'No skills listed',
+    tone: item.tone || getSkillTone(index),
+  }))
+}
+
+function getSkillTone(index) {
+  return ['purple', 'blue', 'orange', 'green'][index % 4]
+}
+
+function filterInterviewsForCv(interviews, analysis) {
+  if (!analysis?.cvId) {
+    return interviews
+  }
+
+  return interviews.filter((interview) => interview.cvId === analysis.cvId)
+}
+
+function shouldShowFallbackInterview(interview, analysis) {
+  return !analysis?.cvId || interview?.cvId === analysis.cvId
+}
+
+function handleDeleteCv(item, onDeleteCv, copy) {
+  const fileName = item?.fileName || 'this CV'
+
+  if (window.confirm(copy.deleteConfirm(fileName))) {
+    onDeleteCv(item)
+  }
+}
+
+function getCvKey(item) {
+  return item?.cvId || `${item?.fileName || 'cv'}-${getCvDate(item)}`
+}
+
+function getCvDate(item) {
+  return item?.uploadedAt || item?.analyzedAt || item?.updatedAt || item?.createdAt || ''
+}
+
+function getReadinessLabel(score, copy) {
+  if (score >= 85) return copy.readinessLabels.strong
+  if (score >= 70) return copy.readinessLabels.ready
+  if (score > 0) return copy.readinessLabels.needs
+  return copy.readinessLabels.empty
+}
+
+function Sidebar({ appCopy, currentPage, onNavigate, onLogout }) {
   return (
     <aside className="sidebar" aria-label="Main navigation">
       <div className="brand">
@@ -305,7 +473,7 @@ function Sidebar({ currentPage, onNavigate, onLogout }) {
       </div>
 
       <nav className="nav-menu">
-        <span className="nav-caption">Main Menu</span>
+        <span className="nav-caption">{appCopy.common.mainMenu}</span>
         {navItems.slice(0, 5).map((item) => (
           <button
             className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
@@ -314,11 +482,11 @@ function Sidebar({ currentPage, onNavigate, onLogout }) {
             onClick={() => onNavigate(item.id)}
           >
             <Icon name={item.icon} />
-            <span>{item.label}</span>
+            <span>{appCopy.nav[item.id] || item.label}</span>
           </button>
         ))}
 
-        <span className="nav-caption nav-caption-spaced">General</span>
+        <span className="nav-caption nav-caption-spaced">{appCopy.common.general}</span>
         {navItems.slice(5).map((item) => (
           <button
             className="nav-item"
@@ -327,40 +495,50 @@ function Sidebar({ currentPage, onNavigate, onLogout }) {
             onClick={() => onNavigate(item.id)}
           >
             <Icon name={item.icon} />
-            <span>{item.label}</span>
+            <span>{appCopy.nav[item.id] || item.label}</span>
           </button>
         ))}
       </nav>
 
       <button className="logout-button" type="button" onClick={onLogout}>
         <Icon name="logout" />
-        Log Out
+        {appCopy.common.logOut}
       </button>
     </aside>
   )
 }
 
-function Topbar({ currentUser }) {
+function Topbar({
+  appCopy,
+  colorTheme,
+  currentUser,
+  language,
+  onLanguageChange,
+  onThemeChange,
+}) {
   return (
     <header className="topbar">
       <div className="topbar-title">
-        <button className="icon-button" type="button" aria-label="Go back" title="Go back">
+        <button className="icon-button" type="button" aria-label={appCopy.common.goBack} title={appCopy.common.goBack}>
           <Icon name="arrowLeft" />
         </button>
         <div>
-          <p>Dashboard</p>
-          <h2>Candidate Skill Assessment</h2>
+          <p>{appCopy.dashboard.page}</p>
+          <h2>{appCopy.dashboard.title}</h2>
         </div>
       </div>
 
       <div className="topbar-actions">
-        <button className="icon-button" type="button" aria-label="Notifications" title="Notifications">
-          <Icon name="bell" />
-        </button>
-        <div className="user-chip" aria-label="Current user">
+        <PreferenceControls
+          colorTheme={colorTheme}
+          language={language}
+          onLanguageChange={onLanguageChange}
+          onThemeChange={onThemeChange}
+        />
+        <div className="user-chip" aria-label={appCopy.common.currentUser}>
           <span>{currentUser.fullName}</span>
           <small>{currentUser.role}</small>
-          <div className="avatar">{currentUser.initials}</div>
+          <div className="avatar">{currentUser.avatarUrl ? <img src={currentUser.avatarUrl} alt="" /> : currentUser.initials}</div>
         </div>
       </div>
     </header>
@@ -513,6 +691,9 @@ function Icon({ name }) {
     play: <path d="M8 5v14l11-7z" />,
     logout: <path d="M10 17l5-5-5-5M15 12H3M21 4v16" />,
     arrowLeft: <path d="M15 18l-6-6 6-6" />,
+    chevronDown: <path d="m6 9 6 6 6-6" />,
+    chevronUp: <path d="m18 15-6-6-6 6" />,
+    trash: <path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3" />,
   }
 
   return (

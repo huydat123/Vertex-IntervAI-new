@@ -1,6 +1,8 @@
 const CV_STORAGE_KEY = 'talentGraph.cvAnalysis'
 const CV_HISTORY_KEY = 'talentGraph.cvHistory'
+const CV_DELETED_KEY = 'talentGraph.deletedCvKeys'
 const MAX_HISTORY_ITEMS = 20
+const MAX_DELETED_ITEMS = 100
 const MAX_CV_SIZE = 10 * 1024 * 1024
 const ALLOWED_EXTENSIONS = ['pdf', 'doc', 'docx']
 const ALLOWED_TYPES = [
@@ -9,31 +11,102 @@ const ALLOWED_TYPES = [
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ]
 
-export function loadCvAnalysis() {
+export function loadCvAnalysis(userId) {
   try {
-    const stored = window.localStorage.getItem(CV_STORAGE_KEY)
-    return stored ? JSON.parse(stored) : null
+    const stored = window.localStorage.getItem(getUserStorageKey(CV_STORAGE_KEY, userId))
+    const analysis = stored ? JSON.parse(stored) : null
+
+    if (isCvHistoryItemDeleted(analysis, userId)) {
+      return null
+    }
+
+    return analysis
   } catch {
     return null
   }
 }
 
-export function saveCvAnalysis(analysis) {
-  window.localStorage.setItem(CV_STORAGE_KEY, JSON.stringify(analysis))
-  saveCvHistory(upsertHistoryItem(loadCvHistory(), analysis, getCvHistoryKey))
+export function saveCvAnalysis(analysis, userId = analysis?.userId) {
+  const resolvedUserId = getResolvedUserId(userId)
+  forgetDeletedCvKey(getCvHistoryKey(analysis), resolvedUserId)
+
+  window.localStorage.setItem(getUserStorageKey(CV_STORAGE_KEY, resolvedUserId), JSON.stringify(analysis))
+  saveCvHistory(
+    upsertHistoryItem(loadCvHistory(resolvedUserId), analysis, getCvHistoryKey),
+    resolvedUserId,
+  )
 }
 
-export function loadCvHistory() {
+export function loadCvHistory(userId) {
   try {
-    const stored = window.localStorage.getItem(CV_HISTORY_KEY)
-    return stored ? JSON.parse(stored) : []
+    const stored = window.localStorage.getItem(getUserStorageKey(CV_HISTORY_KEY, userId))
+    const items = stored ? JSON.parse(stored) : []
+
+    return items.filter((item) => !isCvHistoryItemDeleted(item, userId))
   } catch {
     return []
   }
 }
 
-export function saveCvHistory(items) {
-  window.localStorage.setItem(CV_HISTORY_KEY, JSON.stringify(items.slice(0, MAX_HISTORY_ITEMS)))
+export function saveCvHistory(items, userId) {
+  const visibleItems = (Array.isArray(items) ? items : [])
+    .filter((item) => !isCvHistoryItemDeleted(item, userId))
+
+  window.localStorage.setItem(
+    getUserStorageKey(CV_HISTORY_KEY, userId),
+    JSON.stringify(visibleItems.slice(0, MAX_HISTORY_ITEMS)),
+  )
+}
+
+export function deleteCvAnalysis(item, userId) {
+  const resolvedUserId = getResolvedUserId(userId || item?.userId)
+  const key = getCvHistoryKey(item)
+
+  if (!key) {
+    return {
+      cvAnalysis: loadCvAnalysis(resolvedUserId),
+      cvHistory: loadCvHistory(resolvedUserId),
+    }
+  }
+
+  const currentAnalysis = loadCvAnalysis(resolvedUserId)
+  rememberDeletedCvKey(key, resolvedUserId)
+
+  const nextHistory = loadCvHistory(resolvedUserId)
+  const nextAnalysis = getCvHistoryKey(currentAnalysis) === key
+    ? nextHistory[0] || null
+    : currentAnalysis
+
+  saveCvHistory(nextHistory, resolvedUserId)
+
+  if (nextAnalysis) {
+    window.localStorage.setItem(getUserStorageKey(CV_STORAGE_KEY, resolvedUserId), JSON.stringify(nextAnalysis))
+  } else {
+    window.localStorage.removeItem(getUserStorageKey(CV_STORAGE_KEY, resolvedUserId))
+  }
+
+  return {
+    cvAnalysis: nextAnalysis,
+    cvHistory: nextHistory,
+  }
+}
+
+export function isCvHistoryItemDeleted(item, userId) {
+  const key = getCvHistoryKey(item)
+
+  if (!key) {
+    return false
+  }
+
+  return loadDeletedCvKeys(userId || item?.userId).includes(key)
+}
+
+export function getCvHistoryKey(item) {
+  if (!item) {
+    return ''
+  }
+
+  return item?.cvId || `${item?.fileName || 'cv'}-${getCvHistoryDate(item)}`
 }
 
 export function validateCvFile(file) {
@@ -122,10 +195,6 @@ function createId() {
   return `cv-${Date.now()}`
 }
 
-function getCvHistoryKey(item) {
-  return item?.cvId || `${item?.fileName || 'cv'}-${item?.uploadedAt || item?.createdAt || ''}`
-}
-
 function upsertHistoryItem(items, item, getKey) {
   if (!item) {
     return items
@@ -135,4 +204,56 @@ function upsertHistoryItem(items, item, getKey) {
   const nextItems = [item, ...items.filter((current) => getKey(current) !== key)]
 
   return nextItems.slice(0, MAX_HISTORY_ITEMS)
+}
+
+function getCvHistoryDate(item) {
+  return item?.uploadedAt || item?.analyzedAt || item?.updatedAt || item?.createdAt || ''
+}
+
+function loadDeletedCvKeys(userId) {
+  try {
+    const stored = window.localStorage.getItem(getUserStorageKey(CV_DELETED_KEY, userId))
+    const keys = stored ? JSON.parse(stored) : []
+
+    return Array.isArray(keys) ? keys : []
+  } catch {
+    return []
+  }
+}
+
+function saveDeletedCvKeys(keys, userId) {
+  window.localStorage.setItem(
+    getUserStorageKey(CV_DELETED_KEY, userId),
+    JSON.stringify(Array.from(new Set(keys.filter(Boolean))).slice(0, MAX_DELETED_ITEMS)),
+  )
+}
+
+function rememberDeletedCvKey(key, userId) {
+  if (!key) {
+    return
+  }
+
+  saveDeletedCvKeys([key, ...loadDeletedCvKeys(userId)], userId)
+}
+
+function forgetDeletedCvKey(key, userId) {
+  if (!key) {
+    return
+  }
+
+  saveDeletedCvKeys(loadDeletedCvKeys(userId).filter((item) => item !== key), userId)
+}
+
+function getUserStorageKey(baseKey, userId) {
+  const resolvedUserId = getResolvedUserId(userId)
+
+  return resolvedUserId ? `${baseKey}.${sanitizeUserId(resolvedUserId)}` : baseKey
+}
+
+function getResolvedUserId(userId) {
+  return typeof userId === 'string' && userId.trim() ? userId.trim() : ''
+}
+
+function sanitizeUserId(userId) {
+  return userId.replace(/[^a-zA-Z0-9._:-]/g, '_')
 }

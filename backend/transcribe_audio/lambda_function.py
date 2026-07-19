@@ -55,6 +55,53 @@ def get_http_method(event):
     )
 
 
+def get_authorizer_claims(event):
+    authorizer = event.get("requestContext", {}).get("authorizer") or {}
+    return (
+        authorizer.get("jwt", {}).get("claims")
+        or authorizer.get("claims")
+        or {}
+    )
+
+def get_request_identity(event):
+    claims = get_authorizer_claims(event)
+    groups = parse_groups(claims.get("cognito:groups"))
+    role = clean_identity_string(claims.get("custom:role")) or ("admin" if "admin" in groups else "user")
+    user_id = clean_identity_string(
+        claims.get("sub")
+        or claims.get("username")
+        or claims.get("cognito:username")
+    )
+
+    return {
+        "userId": user_id,
+        "role": role,
+        "isAdmin": role == "admin" or "admin" in groups,
+        "isAuthenticated": bool(user_id),
+    }
+
+def resolve_user_id(identity, requested_user_id=None):
+    requested = clean_identity_string(requested_user_id) or DEFAULT_USER_ID
+
+    if identity["isAuthenticated"]:
+        if identity["isAdmin"] and requested:
+            return requested
+        return identity["userId"]
+
+    return requested
+
+def parse_groups(value):
+    if isinstance(value, list):
+        return [str(item).lower() for item in value]
+
+    if isinstance(value, str):
+        return [item.strip().lower() for item in value.split(",") if item.strip()]
+
+    return []
+
+def clean_identity_string(value):
+    return value.strip() if isinstance(value, str) else ""
+
 def lambda_handler(event, context):
     try:
         method = get_http_method(event)
@@ -67,12 +114,13 @@ def lambda_handler(event, context):
 
         body = json.loads(event.get("body") or "{}")
         action = safe_string(body.get("action")) or "start"
+        identity = get_request_identity(event)
 
         if action == "start":
-            return start_transcription(body)
+            return start_transcription(body, identity)
 
         if action == "status":
-            return get_transcription_status(body)
+            return get_transcription_status(body, identity)
 
         return response(400, {"message": "Unsupported action"})
 
@@ -95,8 +143,8 @@ def lambda_handler(event, context):
         )
 
 
-def start_transcription(body):
-    user_id = sanitize_path_part(body.get("userId") or DEFAULT_USER_ID)
+def start_transcription(body, identity):
+    user_id = sanitize_path_part(resolve_user_id(identity, body.get("userId")))
     interview_id = sanitize_path_part(body.get("interviewId") or "interview_demo")
     question_index = sanitize_path_part(str(body.get("questionIndex", "0")))
     content_type = normalize_content_type(body.get("contentType"))
@@ -157,11 +205,17 @@ def start_transcription(body):
     )
 
 
-def get_transcription_status(body):
+def get_transcription_status(body, identity):
     job_name = safe_string(body.get("jobName"))
 
     if not job_name:
         return response(400, {"message": "jobName is required"})
+
+    if identity["isAuthenticated"] and not identity["isAdmin"]:
+        user_prefix = f"tgai-{sanitize_path_part(identity['userId'])}-"
+
+        if not job_name.startswith(user_prefix):
+            return response(403, {"message": "You cannot read another user's transcription job"})
 
     result = transcribe.get_transcription_job(TranscriptionJobName=job_name)
     job = result["TranscriptionJob"]

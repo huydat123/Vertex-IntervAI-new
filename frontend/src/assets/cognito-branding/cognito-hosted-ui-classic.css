@@ -1,0 +1,100 @@
+.background-customizable {
+  background-color: #050816;
+  background-image:
+    radial-gradient(circle at 82% 24%, rgba(34, 211, 238, .24), transparent 26%),
+    radial-gradient(circle at 18% 78%, rgba(52, 211, 153, .18), transparent 28%),
+    radial-gradient(circle at 54% 76%, rgba(124, 58, 237, .16), transparent 30%),
+    linear-gradient(135deg, #020617 0%, #071426 52%, #0f172a 100%);
+}
+
+.banner-customizable {
+  background: transparent;
+  padding: 28px 0 10px;
+}
+
+.logo-customizable {
+  max-width: 240px;
+  max-height: 82px;
+}
+
+.label-customizable {
+  color: #111827;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.textDescription-customizable,
+.idpDescription-customizable,
+.legalText-customizable {
+  color: #475569;
+  font-size: 14px;
+}
+
+.inputField-customizable {
+  height: 48px;
+  color: #0f172a;
+  background: #ffffff;
+  border: 1px solid #94a3b8;
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, .08);
+  font-size: 15px;
+}
+
+.inputField-customizable:focus {
+  border-color: #06b6d4;
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, .16);
+}
+
+.submitButton-customizable {
+  height: 48px;
+  color: #ffffff;
+  background: #0f172a;
+  border: 1px solid #0f172a;
+  border-radius: 12px;
+  box-shadow: 0 18px 34px rgba(15, 23, 42, .2);
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.submitButton-customizable:hover {
+  color: #ffffff;
+  background: #0891b2;
+  border-color: #0891b2;
+}
+
+.idpButton-customizable,
+.socialButton-customizable {
+  height: 44px;
+  color: #0f172a;
+  background: #f8fafc;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  font-weight: 800;
+}
+
+.idpButton-customizable:hover,
+.socialButton-customizable:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+
+.redirect-customizable {
+  color: #0284c7;
+  font-weight: 800;
+}
+
+.errorMessage-customizable {
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.passwordCheck-valid-customizable {
+  color: #166534;
+}
+
+.passwordCheck-notValid-customizable {
+  color: #991b1b;
+}

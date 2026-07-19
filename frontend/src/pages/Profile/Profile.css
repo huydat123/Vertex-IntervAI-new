@@ -34,6 +34,7 @@
   width: 82px;
   height: 82px;
   flex: 0 0 82px;
+  overflow: hidden;
   place-items: center;
   color: #ffffff;
   background: rgba(17, 18, 22, 0.42);
@@ -41,6 +42,74 @@
   border-radius: 8px;
   font-size: 24px;
   font-weight: 900;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar-stack {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+}
+
+.profile-avatar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.avatar-upload-button,
+.avatar-remove-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.avatar-upload-button {
+  color: #1d4ed8;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.avatar-remove-button {
+  color: #ffffff;
+  background: rgba(15, 23, 42, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.avatar-upload-button input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.avatar-upload-button .icon,
+.avatar-remove-button .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.avatar-error {
+  max-width: 240px;
+  color: #fee2e2;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 .profile-hero h1,
