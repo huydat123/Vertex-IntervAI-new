@@ -559,8 +559,29 @@ body.theme-black :is(.upload-error, .interview-error) {
   border-color: rgba(248, 113, 113, 0.24) !important;
 }
 
+body.theme-black .interview-voice-status {
+  color: #bfdbfe !important;
+  background: rgba(37, 99, 235, 0.16) !important;
+  border-color: rgba(96, 165, 250, 0.22) !important;
+}
+
 body.theme-black :is(.admin-table th, .table-head, .table-head span:first-child) {
   color: #94a3b8 !important;
+}
+
+body.theme-black .admin-filter-bar {
+  background: #0f172a !important;
+  border-color: rgba(148, 163, 184, 0.18) !important;
+}
+
+body.theme-black .admin-filter-field span {
+  color: #94a3b8 !important;
+}
+
+body.theme-black :is(.admin-filter-field input, .admin-filter-field select) {
+  color: #e5e7eb !important;
+  background: #020617 !important;
+  border-color: rgba(148, 163, 184, 0.28) !important;
 }
 
 body.theme-black .admin-table td {

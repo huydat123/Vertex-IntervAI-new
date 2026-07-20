@@ -83,6 +83,27 @@ export async function sendFeedbackEmail({ userId, recipientEmail, subject, messa
   })
 }
 
+export async function updateAdminUserAccess({ userId, username, action }) {
+  return callAdminApi('/admin/users/action', {
+    method: 'POST',
+    body: {
+      userId,
+      username,
+      action,
+    },
+  })
+}
+
+export async function deleteAdminInterview({ userId, interviewId }) {
+  return callAdminApi('/admin/interviews/delete', {
+    method: 'POST',
+    body: {
+      userId,
+      interviewId,
+    },
+  })
+}
+
 async function callAdminApi(path, options = {}) {
   let response
   const method = options.method || 'GET'
@@ -102,7 +123,7 @@ async function callAdminApi(path, options = {}) {
   try {
     response = await authFetch(`${ADMIN_API_BASE_URL}${path}`, fetchOptions)
   } catch {
-    throw new Error('Cannot connect to admin API. Check API Gateway route, JWT authorizer, and Lambda integration.')
+    throw new Error('Cannot connect to the admin service. Please check the app connection and permissions.')
   }
 
   const data = await parseJsonResponse(response)

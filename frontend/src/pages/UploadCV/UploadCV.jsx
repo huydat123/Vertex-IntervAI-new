@@ -21,16 +21,16 @@ const navItems = [
 ]
 
 const uploadSteps = [
-  { label: 'Validate CV', description: 'Check file type and size' },
-  { label: 'Upload file', description: 'Send CV to API Gateway, Lambda, and S3' },
-  { label: 'Analyze CV', description: 'Read CV text and score it with AWS AI' },
-  { label: 'Save result', description: 'Store analysis in localStorage' },
+  { label: 'Validate document', description: 'Check file type and size' },
+  { label: 'Upload securely', description: 'Send CV to your private workspace' },
+  { label: 'Analyze CV', description: 'Extract skills, role fit, and score with AI' },
+  { label: 'Save result', description: 'Keep the analysis for Dashboard and History' },
 ]
 
 const uploadBenefits = [
-  { label: 'S3 Storage', value: 'Secure CV file', icon: 'cloud' },
-  { label: 'AI Parser', value: 'Skills & projects', icon: 'brain' },
-  { label: 'DynamoDB', value: 'Saved result', icon: 'database' },
+  { label: 'Secure Upload', value: 'Private CV intake', icon: 'cloud' },
+  { label: 'AI Profile', value: 'Skills & projects', icon: 'brain' },
+  { label: 'Saved Progress', value: 'History & context', icon: 'database' },
 ]
 
 const fallbackUser = {
@@ -189,7 +189,7 @@ export default function UploadCV({
                 </div>
               </div>
 
-              <div className="upload-benefit-strip" aria-label="AWS upload pipeline">
+              <div className="upload-benefit-strip" aria-label="CV upload pipeline">
                 {uploadBenefits.map((item, index) => (
                   <div className="upload-benefit" key={item.label}>
                     <span><Icon name={item.icon} /></span>
@@ -480,7 +480,7 @@ function InterviewPreparation({ analysis, copy }) {
         <PrepItem label={copy.prepItems[0]} value={analysis.suggestedPosition} />
         <PrepItem label={copy.prepItems[1]} value={getInterviewLevel(analysis.cvScore, copy)} />
         <PrepItem label={copy.prepItems[2]} value={copy.estimatedQuestions} />
-        <PrepItem label={copy.prepItems[3]} value={skills.join(', ') || 'React, Python, AWS'} />
+        <PrepItem label={copy.prepItems[3]} value={skills.join(', ') || 'React, Python, Databases'} />
       </div>
     </section>
   )

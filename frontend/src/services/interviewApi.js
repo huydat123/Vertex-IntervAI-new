@@ -51,7 +51,7 @@ export async function createInterviewOnAws({ cvAnalysis, currentUser, roleProfil
   return {
     interviewId: interview.interviewId,
     role: interview.role,
-    focus: interview.roleFocus || interview.skills?.slice(0, 3).join(', ') || 'AWS AI Interview',
+    focus: interview.roleFocus || interview.skills?.slice(0, 3).join(', ') || 'AI Interview',
     roleKey: roleProfile?.id || 'cv-role',
     roleCategory: interview.roleCategory || roleProfile?.category || 'cv',
     skills: interview.skills || skills,
@@ -60,7 +60,7 @@ export async function createInterviewOnAws({ cvAnalysis, currentUser, roleProfil
     createdAt: interview.createdAt,
     status: interview.status || 'IN_PROGRESS',
     language: activeLanguage,
-    source: 'AWS',
+    source: 'Live AI',
   }
 }
 
@@ -89,14 +89,14 @@ export async function submitAnswerToAws({
   }
 
   return {
-    feedback: evaluation.feedback || 'Answer reviewed by AWS AI.',
+    feedback: evaluation.feedback || 'Answer reviewed by AI.',
     score: Number(evaluation.score || 0),
     level: getLevelFromScore(Number(evaluation.score || 0)),
     shouldAdvance: Boolean(evaluation.shouldAdvance),
     strengths: evaluation.strengths || [],
     improvements: evaluation.improvements || [],
     interview,
-    source: response.answer?.aiProvider || 'AWS',
+    source: 'Live AI',
   }
 }
 
@@ -112,7 +112,7 @@ async function callInterviewApi(path, body) {
       body: JSON.stringify(body),
     })
   } catch {
-    throw new Error('Cannot connect to interview API. Please check API Gateway CORS and Lambda integration.')
+    throw new Error('Cannot connect to the interview service. Please check the app connection and try again.')
   }
 
   const data = await parseJsonResponse(response)

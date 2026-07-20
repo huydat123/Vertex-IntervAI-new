@@ -78,14 +78,12 @@ def get_request_identity(event):
     claims = get_authorizer_claims(event)
     groups = parse_groups(claims.get("cognito:groups"))
     role = (clean_string(claims.get("custom:role")) or ("admin" if "admin" in groups else "user")).lower()
-    user_id = clean_string(
-        claims.get("sub")
-        or claims.get("username")
-        or claims.get("cognito:username")
-    )
+    username = clean_string(claims.get("cognito:username") or claims.get("username"))
+    user_id = clean_string(claims.get("sub") or username)
 
     return {
         "userId": user_id,
+        "username": username,
         "email": clean_string(claims.get("email")),
         "role": role,
         "groups": groups,
@@ -155,6 +153,12 @@ def lambda_handler(event, context):
 
             if path.endswith("/admin/feedback/email"):
                 return send_feedback_email(identity, body)
+
+            if path.endswith("/admin/users/action"):
+                return manage_user_account(identity, body)
+
+            if path.endswith("/admin/interviews/delete"):
+                return delete_interview_record(identity, body)
 
             return response(404, {"message": "Admin route not found"})
 
@@ -517,6 +521,138 @@ def send_feedback_email(identity, body):
         },
     )
 
+def manage_user_account(identity, body):
+    action = clean_string(body.get("action")).lower()
+    target_user_id = clean_string(body.get("userId"))
+    target_username = clean_string(body.get("username"))
+
+    if action not in {"lock", "unlock", "delete"}:
+        return response(400, {"message": "action must be lock, unlock, or delete"})
+
+    if action in {"lock", "unlock"} and not COGNITO_USER_POOL_ID:
+        return response(400, {"message": "User pool is not configured for account lock/unlock"})
+
+    target_user = find_cognito_user(target_username, target_user_id)
+
+    if not target_user:
+        if action == "delete" and target_user_id:
+            delete_user_profile(target_user_id)
+            write_audit_log(
+                identity,
+                "USER_PROFILE_DELETED",
+                "USER",
+                target_user_id,
+                {"targetUserId": target_user_id, "source": "profile"},
+            )
+            return response(
+                200,
+                {
+                    "message": "Profile-only user deleted",
+                    "action": action,
+                    "userId": target_user_id,
+                },
+            )
+
+        return response(404, {"message": "User account not found"})
+
+    if is_admin_account(target_user):
+        return response(400, {"message": "Admin accounts cannot be managed from the candidate user list"})
+
+    if is_same_identity(identity, target_user):
+        return response(400, {"message": "You cannot manage your own admin account"})
+
+    username = target_user.get("username")
+    user_id = target_user.get("userId")
+
+    if action == "lock":
+        cognito.admin_disable_user(UserPoolId=COGNITO_USER_POOL_ID, Username=username)
+        target_user["enabled"] = False
+        target_user["access"] = "LOCKED"
+        audit_action = "USER_LOCKED"
+        message = "User locked"
+    elif action == "unlock":
+        cognito.admin_enable_user(UserPoolId=COGNITO_USER_POOL_ID, Username=username)
+        target_user["enabled"] = True
+        target_user["access"] = "ACTIVE"
+        audit_action = "USER_UNLOCKED"
+        message = "User unlocked"
+    else:
+        cognito.admin_delete_user(UserPoolId=COGNITO_USER_POOL_ID, Username=username)
+        delete_user_profile(user_id)
+        audit_action = "USER_DELETED"
+        message = "User deleted"
+
+    write_audit_log(
+        identity,
+        audit_action,
+        "USER",
+        user_id or username,
+        {
+            "targetUserId": user_id,
+            "targetUsername": username,
+            "targetEmail": target_user.get("email", ""),
+            "targetStatus": target_user.get("status", ""),
+        },
+    )
+
+    return response(
+        200,
+        {
+            "message": message,
+            "action": action,
+            "user": target_user,
+        },
+    )
+
+def delete_interview_record(identity, body):
+    user_id = clean_string(body.get("userId"))
+    interview_id = clean_string(body.get("interviewId"))
+
+    if not user_id or not interview_id:
+        return response(400, {"message": "userId and interviewId are required"})
+
+    table = dynamodb.Table(INTERVIEWS_TABLE)
+
+    try:
+        result = table.delete_item(
+            Key={"userId": user_id, "interviewId": interview_id},
+            ConditionExpression="attribute_exists(userId) AND attribute_exists(interviewId)",
+            ReturnValues="ALL_OLD",
+        )
+    except ClientError as error:
+        error_info = error.response.get("Error", {})
+
+        if error_info.get("Code") == "ConditionalCheckFailedException":
+            return response(404, {"message": "Interview not found"})
+
+        raise
+
+    deleted_item = result.get("Attributes", {})
+    role = clean_string(deleted_item.get("role")) or "Interview"
+
+    write_audit_log(
+        identity,
+        "INTERVIEW_DELETED",
+        "INTERVIEW",
+        interview_id,
+        {
+            "targetUserId": user_id,
+            "interviewId": interview_id,
+            "role": role,
+            "status": deleted_item.get("status", ""),
+            "overallScore": deleted_item.get("overallScore", 0),
+        },
+    )
+
+    return response(
+        200,
+        {
+            "message": "Interview deleted",
+            "userId": user_id,
+            "interviewId": interview_id,
+        },
+    )
+
 def get_cv_item(user_id, cv_id):
     table = dynamodb.Table(CVS_TABLE)
     result = table.get_item(Key={"userId": user_id, "cvId": cv_id})
@@ -805,33 +941,35 @@ def build_user_rows_result(profile_items, cv_items, interview_items):
     cognito_users = cognito_result["users"]
 
     if cognito_users:
+        rows = [
+            enrich_user_row(user, profiles_by_user_id, latest_cvs, latest_interviews)
+            for user in cognito_users
+        ]
         return {
-            "users": [
-                enrich_user_row(user, profiles_by_user_id, latest_cvs, latest_interviews)
-                for user in cognito_users
-            ],
+            "users": [row for row in rows if not is_admin_account(row)],
             "source": "cognito",
             "diagnostics": cognito_result["diagnostics"],
         }
 
     user_ids = set(profiles_by_user_id) | set(latest_cvs) | set(latest_interviews)
+    rows = [
+        enrich_user_row(
+            {
+                "userId": user_id,
+                "email": profiles_by_user_id.get(user_id, {}).get("email", ""),
+                "fullName": profiles_by_user_id.get(user_id, {}).get("fullName", ""),
+                "role": profiles_by_user_id.get(user_id, {}).get("role", "user"),
+                "status": "PROFILE_ONLY",
+                "groups": [],
+            },
+            profiles_by_user_id,
+            latest_cvs,
+            latest_interviews,
+        )
+        for user_id in sorted(user_ids)
+    ]
     return {
-        "users": [
-            enrich_user_row(
-                {
-                    "userId": user_id,
-                    "email": profiles_by_user_id.get(user_id, {}).get("email", ""),
-                    "fullName": profiles_by_user_id.get(user_id, {}).get("fullName", ""),
-                    "role": profiles_by_user_id.get(user_id, {}).get("role", "user"),
-                    "status": "PROFILE_ONLY",
-                    "groups": [],
-                },
-                profiles_by_user_id,
-                latest_cvs,
-                latest_interviews,
-            )
-            for user_id in sorted(user_ids)
-        ],
+        "users": [row for row in rows if not is_admin_account(row)],
         "source": "dynamodb",
         "diagnostics": cognito_result["diagnostics"],
     }
@@ -868,24 +1006,8 @@ def list_cognito_users():
             result = cognito.list_users(**params)
 
             for item in result.get("Users", []):
-                attributes = {
-                    attr.get("Name"): attr.get("Value")
-                    for attr in item.get("Attributes", [])
-                }
-                groups = list_user_groups(item.get("Username", ""), diagnostics)
-                users.append(
-                    {
-                        "userId": attributes.get("sub") or item.get("Username", ""),
-                        "username": item.get("Username", ""),
-                        "email": attributes.get("email", ""),
-                        "fullName": attributes.get("name") or attributes.get("given_name") or attributes.get("email", ""),
-                        "role": "admin" if "admin" in groups else "user",
-                        "status": item.get("UserStatus", "UNKNOWN"),
-                        "enabled": item.get("Enabled", False),
-                        "createdAt": item.get("UserCreateDate", "").isoformat() if item.get("UserCreateDate") else "",
-                        "groups": groups,
-                    }
-                )
+                row = cognito_user_to_row_with_diagnostics(item, diagnostics)
+                users.append(row)
 
             pagination_token = result.get("PaginationToken")
             if not pagination_token:
@@ -918,6 +1040,129 @@ def list_user_groups(username, diagnostics=None):
             diagnostics["lastGroupLookupErrorCode"] = error_info.get("Code", "ClientError")
             diagnostics["lastGroupLookupErrorMessage"] = error_info.get("Message", str(error))
         return []
+
+def find_cognito_user(username="", user_id=""):
+    if not COGNITO_USER_POOL_ID:
+        return None
+
+    for candidate in [username, user_id]:
+        candidate = clean_string(candidate)
+
+        if not candidate:
+            continue
+
+        user = get_cognito_user_by_username(candidate)
+        if user:
+            return user
+
+    user_id = clean_string(user_id)
+    if not user_id:
+        return None
+
+    try:
+        result = cognito.list_users(
+            UserPoolId=COGNITO_USER_POOL_ID,
+            Filter=f'sub = "{escape_cognito_filter_value(user_id)}"',
+            Limit=1,
+        )
+    except ClientError as error:
+        print("Could not find Cognito user by sub:", user_id, str(error))
+        return None
+
+    users = result.get("Users", [])
+    if not users:
+        return None
+
+    return cognito_user_to_row(users[0])
+
+def get_cognito_user_by_username(username):
+    try:
+        result = cognito.admin_get_user(
+            UserPoolId=COGNITO_USER_POOL_ID,
+            Username=username,
+        )
+    except ClientError:
+        return None
+
+    item = {
+        "Username": result.get("Username", username),
+        "Attributes": result.get("UserAttributes", []),
+        "UserStatus": result.get("UserStatus", "UNKNOWN"),
+        "Enabled": result.get("Enabled", False),
+        "UserCreateDate": result.get("UserCreateDate"),
+    }
+    return cognito_user_to_row(item)
+
+def cognito_user_to_row(item):
+    attributes = {
+        attr.get("Name"): attr.get("Value")
+        for attr in item.get("Attributes", [])
+    }
+    username = item.get("Username", "")
+    groups = list_user_groups(username)
+
+    return {
+        "userId": attributes.get("sub") or username,
+        "username": username,
+        "email": attributes.get("email", ""),
+        "fullName": attributes.get("name") or attributes.get("given_name") or attributes.get("email", ""),
+        "role": "admin" if "admin" in groups else "user",
+        "status": item.get("UserStatus", "UNKNOWN"),
+        "enabled": item.get("Enabled", False),
+        "createdAt": item.get("UserCreateDate", "").isoformat() if item.get("UserCreateDate") else "",
+        "groups": groups,
+    }
+
+def cognito_user_to_row_with_diagnostics(item, diagnostics):
+    attributes = {
+        attr.get("Name"): attr.get("Value")
+        for attr in item.get("Attributes", [])
+    }
+    username = item.get("Username", "")
+    groups = list_user_groups(username, diagnostics)
+
+    return {
+        "userId": attributes.get("sub") or username,
+        "username": username,
+        "email": attributes.get("email", ""),
+        "fullName": attributes.get("name") or attributes.get("given_name") or attributes.get("email", ""),
+        "role": "admin" if "admin" in groups else "user",
+        "status": item.get("UserStatus", "UNKNOWN"),
+        "enabled": item.get("Enabled", False),
+        "createdAt": item.get("UserCreateDate", "").isoformat() if item.get("UserCreateDate") else "",
+        "groups": groups,
+    }
+
+def delete_user_profile(user_id):
+    user_id = clean_string(user_id)
+    if not user_id:
+        return
+
+    try:
+        dynamodb.Table(USERS_TABLE).delete_item(Key={"userId": user_id})
+    except ClientError as error:
+        error_info = error.response.get("Error", {})
+        print("Could not delete user profile:", user_id, error_info.get("Code"), error_info.get("Message"))
+
+def is_admin_account(user):
+    groups = [str(item).lower() for item in user.get("groups", [])]
+    return clean_string(user.get("role")).lower() == "admin" or "admin" in groups
+
+def is_same_identity(identity, user):
+    identity_ids = {
+        clean_string(identity.get("userId")),
+        clean_string(identity.get("username")),
+        clean_string(identity.get("email")).lower(),
+    }
+    user_ids = {
+        clean_string(user.get("userId")),
+        clean_string(user.get("username")),
+        clean_string(user.get("email")).lower(),
+    }
+    return bool(identity_ids.intersection({item for item in user_ids if item}))
+
+def escape_cognito_filter_value(value):
+    return clean_string(value).replace("\\", "\\\\").replace('"', '\\"')
 
 def enrich_user_row(user, profiles_by_user_id, latest_cvs, latest_interviews):
     user_id = user.get("userId")

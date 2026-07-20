@@ -8,7 +8,6 @@ import {
 } from '../../services/settingsStorage.js'
 import {
   getLanguageConfig,
-  languageFromInterviewLanguage,
   languageOptions,
   syncSettingsLanguage,
 } from '../../services/language.js'
@@ -23,8 +22,6 @@ const navItems = [
   { id: 'result', label: 'Result', icon: 'chart' },
   { id: 'history', label: 'History', icon: 'history' },
 ]
-
-const questionCountOptions = [2, 3, 4, 5, 6, 7, 8]
 
 const fallbackUser = {
   userId: 'user_demo_001',
@@ -45,7 +42,7 @@ const settingsCopy = {
     back: 'Back to dashboard',
     heroEyebrow: 'Control Center',
     heroTitle: 'Configure your interview workspace',
-    heroText: 'Keep only the core defaults for language, scoring, question count, and saved history.',
+    heroText: 'Keep only the core defaults for language, color theme, and app notifications.',
     readiness: 'Readiness',
     ready: 'Ready for practice',
     demo: 'Good for demo',
@@ -54,15 +51,8 @@ const settingsCopy = {
     appDescription: 'Display language and color theme for the workspace.',
     interfaceLanguage: 'Interface language',
     colorTheme: 'Color theme',
-    currentColor: 'Current color',
+    currentColor: 'Light mode',
     blackMode: 'Black mode',
-    interviewTitle: 'AI Interview',
-    interviewDescription: 'Question flow, scoring, and voice language.',
-    interviewLanguage: 'Interview language',
-    scoringMode: 'Scoring mode',
-    questionCount: 'Question count',
-    questions: 'Questions',
-    saveHistory: 'Save interview history',
     notifications: 'Notifications',
     notificationsDescription: 'Status prompts shown inside the app.',
     cvAnalysisComplete: 'CV analysis complete',
@@ -71,11 +61,6 @@ const settingsCopy = {
     setupDescription: 'Saved workspace defaults.',
     language: 'Language',
     theme: 'Theme',
-    scoring: 'Scoring',
-    history: 'History',
-    savedStatus: 'Saved',
-    offStatus: 'Off',
-    perRound: 'per round',
     dataControls: 'Data Controls',
     dataDescription: 'Local browser data for the demo workflow.',
     save: 'Save Settings',
@@ -93,7 +78,7 @@ const settingsCopy = {
     back: 'Quay lại dashboard',
     heroEyebrow: 'Trung tâm điều khiển',
     heroTitle: 'Cấu hình không gian phỏng vấn',
-    heroText: 'Thiết lập ngôn ngữ, cách chấm điểm, số câu hỏi và lịch sử lưu trữ.',
+    heroText: 'Thiết lập ngôn ngữ, màu giao diện và thông báo trong ứng dụng.',
     readiness: 'Sẵn sàng',
     ready: 'Sẵn sàng luyện tập',
     demo: 'Phù hợp demo',
@@ -102,15 +87,8 @@ const settingsCopy = {
     appDescription: 'Ngôn ngữ hiển thị và màu giao diện.',
     interfaceLanguage: 'Ngôn ngữ giao diện',
     colorTheme: 'Màu giao diện',
-    currentColor: 'Màu hiện tại',
+    currentColor: 'Chế độ sáng',
     blackMode: 'Chế độ đen',
-    interviewTitle: 'AI Interview',
-    interviewDescription: 'Số câu hỏi, cách chấm điểm và ngôn ngữ voice/mic.',
-    interviewLanguage: 'Ngôn ngữ phỏng vấn',
-    scoringMode: 'Cách chấm điểm',
-    questionCount: 'Số câu hỏi',
-    questions: 'Câu hỏi',
-    saveHistory: 'Lưu lịch sử phỏng vấn',
     notifications: 'Thông báo',
     notificationsDescription: 'Thông báo trạng thái trong ứng dụng.',
     cvAnalysisComplete: 'Phân tích CV hoàn tất',
@@ -119,11 +97,6 @@ const settingsCopy = {
     setupDescription: 'Cấu hình đã lưu.',
     language: 'Ngôn ngữ',
     theme: 'Giao diện',
-    scoring: 'Chấm điểm',
-    history: 'Lịch sử',
-    savedStatus: 'Đang lưu',
-    offStatus: 'Tắt',
-    perRound: 'mỗi vòng',
     dataControls: 'Dữ liệu cục bộ',
     dataDescription: 'Dữ liệu demo lưu trong trình duyệt.',
     save: 'Lưu cài đặt',
@@ -148,12 +121,11 @@ export default function Settings({
   const [saveState, setSaveState] = useState(copy.saved)
 
   const readiness = useMemo(() => {
-    const languageConfig = getLanguageConfig(settings.language)
     const checks = [
-      settings.interviewLanguage === languageConfig.interviewLanguage,
-      settings.scoringMode === 'balanced',
-      settings.saveHistory,
-      Number(settings.questionCount) >= 5,
+      Boolean(settings.language),
+      Boolean(settings.colorTheme),
+      settings.notifyAnalysis,
+      settings.notifyInterview,
     ]
     const score = Math.round((checks.filter(Boolean).length / checks.length) * 100)
 
@@ -171,15 +143,6 @@ export default function Settings({
 
       if (key === 'language') {
         nextSettings = syncSettingsLanguage(nextSettings)
-        syncedLanguage = nextSettings.language
-        nextLanguage = nextSettings.language
-      }
-
-      if (key === 'interviewLanguage') {
-        nextSettings = syncSettingsLanguage({
-          ...nextSettings,
-          language: languageFromInterviewLanguage(value),
-        })
         syncedLanguage = nextSettings.language
         nextLanguage = nextSettings.language
       }
@@ -305,44 +268,6 @@ export default function Settings({
                   </div>
                 </section>
 
-                <section className="panel settings-panel">
-                  <PanelHeader title={copy.interviewTitle} description={copy.interviewDescription} />
-                  <div className="settings-form-grid">
-                    <SelectField
-                      label={copy.interviewLanguage}
-                      icon="message"
-                      value={settings.interviewLanguage}
-                      onChange={(value) => updateSetting('interviewLanguage', value)}
-                      options={languageOptions.map((option) => {
-                        const config = getLanguageConfig(option.value)
-                        return { value: config.interviewLanguage, label: config.label }
-                      })}
-                    />
-                    <SelectField
-                      label={copy.scoringMode}
-                      icon="chart"
-                      value={settings.scoringMode}
-                      onChange={(value) => updateSetting('scoringMode', value)}
-                      options={[
-                        { value: 'supportive', label: 'Supportive' },
-                        { value: 'balanced', label: 'Balanced' },
-                        { value: 'strict', label: 'Strict' },
-                      ]}
-                    />
-                    <QuestionCountField
-                      label={copy.questionCount}
-                      countLabel={copy.questions}
-                      value={settings.questionCount}
-                      options={questionCountOptions}
-                      onChange={(value) => updateSetting('questionCount', value)}
-                    />
-                    <ToggleField
-                      label={copy.saveHistory}
-                      checked={settings.saveHistory}
-                      onChange={(value) => updateSetting('saveHistory', value)}
-                    />
-                  </div>
-                </section>
               </div>
 
               <aside className="settings-side-column">
@@ -367,9 +292,6 @@ export default function Settings({
                   <div className="settings-summary-list">
                     <SummaryItem label={copy.language} value={getLanguageConfig(settings.language).label} />
                     <SummaryItem label={copy.theme} value={settings.colorTheme === 'black' ? copy.blackMode : copy.currentColor} />
-                    <SummaryItem label={copy.questions} value={`${settings.questionCount} ${copy.perRound}`} />
-                    <SummaryItem label={copy.scoring} value={settings.scoringMode} />
-                    <SummaryItem label={copy.history} value={settings.saveHistory ? copy.savedStatus : copy.offStatus} />
                   </div>
                 </section>
 
@@ -482,30 +404,6 @@ function SelectField({ label, icon, value, options, onChange }) {
             </option>
           ))}
         </select>
-      </div>
-    </label>
-  )
-}
-
-function QuestionCountField({ label, countLabel, value, options, onChange }) {
-  return (
-    <label className="settings-field question-count-field">
-      <span className="settings-field-icon"><Icon name="chart" /></span>
-      <div>
-        <strong>{label}</strong>
-        <div className="settings-question-count-select">
-          <span>{countLabel}</span>
-          <select
-            value={value}
-            onChange={(event) => onChange(Number(event.target.value))}
-          >
-            {options.map((option) => (
-              <option value={option} key={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </div>
       </div>
     </label>
   )

@@ -240,7 +240,20 @@ function ResultSidebar({ appCopy, currentPage, onNavigate, onLogout }) {
 
       <nav className="nav-menu">
         <span className="nav-caption">{appCopy.common.mainMenu}</span>
-        {navItems.map((item) => (
+        {navItems.slice(0, 5).map((item) => (
+          <button
+            className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
+            type="button"
+            key={item.id}
+            onClick={() => onNavigate(item.id)}
+          >
+            <Icon name={item.icon} />
+            <span>{appCopy.nav[item.id] || item.label}</span>
+          </button>
+        ))}
+
+        <span className="nav-caption nav-caption-spaced">{appCopy.common.general}</span>
+        {navItems.slice(5).map((item) => (
           <button
             className={`nav-item ${currentPage === item.id ? 'active' : ''}`}
             type="button"

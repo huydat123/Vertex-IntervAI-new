@@ -112,7 +112,7 @@ export async function startCognitoLogin({ onRedirectUrl } = {}) {
 
 export async function prepareCognitoLogin() {
   if (!isCognitoConfigured()) {
-    throw new Error('Cognito is not configured yet.')
+    throw new Error('Secure sign-in is not configured yet.')
   }
 
   const codeVerifier = createCodeVerifier()
@@ -160,7 +160,7 @@ async function completeCognitoRedirect() {
 
   if (!code || !codeVerifier || !expectedState || state !== expectedState) {
     cleanOAuthParams()
-    throw new Error('Cognito sign-in callback is invalid. Please try signing in again.')
+    throw new Error('The sign-in callback is invalid. Please try signing in again.')
   }
 
   const tokenData = await requestToken({
@@ -235,7 +235,7 @@ async function requestToken(params) {
   const data = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    throw new Error(data.error_description || data.error || 'Could not complete Cognito sign-in.')
+    throw new Error(data.error_description || data.error || 'Could not complete secure sign-in.')
   }
 
   return data

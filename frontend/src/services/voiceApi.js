@@ -5,8 +5,8 @@ const DEFAULT_VOICE_API_BASE_URL =
 
 const VOICE_API_BASE_URL = import.meta.env.VITE_VOICE_API_BASE_URL || DEFAULT_VOICE_API_BASE_URL
 
-const POLL_INTERVAL_MS = 1800
-const MAX_TRANSCRIBE_POLLS = 18
+const POLL_INTERVAL_MS = 2000
+const MAX_TRANSCRIBE_POLLS = 45
 
 export async function synthesizeQuestionAudio({
   text,
@@ -26,7 +26,7 @@ export async function synthesizeQuestionAudio({
   })
 
   if (!response.audioUrl) {
-    throw new Error('Polly API did not return an audio URL.')
+    throw new Error('Question voice did not return an audio URL.')
   }
 
   return response
@@ -51,7 +51,7 @@ export async function transcribeAnswerAudio({
   })
 
   if (!startResponse.jobName) {
-    throw new Error('Transcribe API did not return a jobName.')
+    throw new Error('Voice transcript did not start correctly.')
   }
 
   for (let attempt = 0; attempt < MAX_TRANSCRIBE_POLLS; attempt += 1) {
@@ -66,7 +66,7 @@ export async function transcribeAnswerAudio({
       const transcript = String(statusResponse.transcript || '').trim()
 
       if (!transcript) {
-        throw new Error('Transcribe completed but did not return transcript text.')
+        throw new Error('Transcript completed but did not return text.')
       }
 
       return {
@@ -111,7 +111,7 @@ async function callVoiceApi(path, body) {
       body: JSON.stringify(body),
     })
   } catch {
-    throw new Error('Cannot connect to AWS voice API. Please check API Gateway CORS and Lambda integration.')
+    throw new Error('Cannot connect to the voice service. Please check the app connection and try again.')
   }
 
   const data = await parseJsonResponse(response)

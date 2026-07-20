@@ -87,7 +87,7 @@ function App() {
         if (isMounted) {
           setAuthError(
             error.message
-              || 'Cognito sign-in could not be completed. Check App Client settings, callback URL, and client secret.',
+              || 'Secure sign-in could not be completed. Please check the login configuration and try again.',
           )
           setCurrentUser(null)
         }
@@ -261,7 +261,7 @@ function App() {
       <main className="auth-loading-page">
         <div>
           <strong>Signing you in...</strong>
-          <span>Connecting to Cognito</span>
+          <span>Preparing secure sign-in</span>
         </div>
       </main>
     )

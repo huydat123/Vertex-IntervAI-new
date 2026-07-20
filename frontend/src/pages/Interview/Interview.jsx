@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import PreferenceControls from '../../components/PreferenceControls.jsx'
 import {
   askMockAi,
-  createInitialMessages,
   createInterviewSession,
   enhanceInterviewFeedback,
   getBrowserSpeechVoices,
@@ -55,7 +54,7 @@ const interviewCopy = {
     aiInterviewer: 'AI Interviewer',
     userLabel: 'You',
     conversation: 'Conversation',
-    transcribeProcessing: ' - Amazon Transcribe is processing audio',
+    transcribeProcessing: ' - Turning audio into text',
     answered: 'answered',
     compact: 'Compact',
     expand: 'Expand',
@@ -71,8 +70,8 @@ const interviewCopy = {
     voiceAnswerText: 'Microphone capture with transcript review.',
     chatAnswer: 'Chat Answer',
     chatAnswerText: 'Written response with AI review.',
-    awsVoice: 'AWS Voice Integration',
-    awsVoiceText: 'Voice and evaluation services for this interview session.',
+    awsVoice: 'Voice and Feedback Tools',
+    awsVoiceText: 'Question voice, speech transcript, and AI feedback for this interview session.',
     browserVoiceLabel: 'Question voice',
     autoVoice: 'Auto voice',
     onlineVietnameseVoice: 'Online Vietnamese voice',
@@ -87,7 +86,7 @@ const interviewCopy = {
     recording: 'Recording',
     statusReviewing: 'Reviewing your answer...',
     statusListening: 'Listening to your voice answer...',
-    statusTranscribing: 'Transcribing your answer with AWS...',
+    statusTranscribing: 'Transcribing your answer...',
     statusSpeaking: 'Preparing question voice...',
     statusReady: 'Ready for your response',
     stateCompleted: 'Completed',
@@ -96,11 +95,11 @@ const interviewCopy = {
     stateTranscribing: 'Transcribing',
     stateSpeaking: 'Speaking',
     stateProgress: 'In progress',
-    pollyCreating: 'Creating question audio with Amazon Polly...',
-    pollyPlaying: 'Playing question with Amazon Polly',
+    pollyCreating: 'Preparing question audio...',
+    pollyPlaying: 'Playing question audio',
     browserVoice: 'Using browser voice',
-    transcribeSending: 'Sending your answer to Amazon Transcribe...',
-    transcribeDone: 'Amazon Transcribe completed. Review the text, then press Send.',
+    transcribeSending: 'Processing your voice answer...',
+    transcribeDone: 'Transcript ready. Review the text, then press Send.',
     recordingVoice: 'Recording your voice answer...',
     micUnsupported: 'Microphone recording is not supported in this browser.',
     micBlocked: 'Microphone permission was blocked or no microphone was found.',
@@ -132,7 +131,7 @@ const interviewCopy = {
     aiInterviewer: 'AI Interviewer',
     userLabel: 'Bạn',
     conversation: 'Hội thoại',
-    transcribeProcessing: ' - Amazon Transcribe đang xử lý audio',
+    transcribeProcessing: ' - Đang chuyển audio thành văn bản',
     answered: 'đã trả lời',
     compact: 'Thu gọn',
     expand: 'Phóng to',
@@ -174,10 +173,10 @@ const interviewCopy = {
     stateSpeaking: 'Đang đọc',
     stateProgress: 'Đang phỏng vấn',
     pollyCreating: 'Đang tạo audio câu hỏi...',
-    pollyPlaying: 'Đang đọc câu hỏi bằng Amazon Polly',
+    pollyPlaying: 'Đang đọc câu hỏi',
     browserVoice: 'Đang đọc bằng giọng trình duyệt',
-    transcribeSending: 'Đang gửi câu trả lời đến Amazon Transcribe...',
-    transcribeDone: 'Amazon Transcribe đã hoàn tất. Hãy kiểm tra văn bản rồi bấm Gửi.',
+    transcribeSending: 'Đang xử lý câu trả lời bằng giọng nói...',
+    transcribeDone: 'Transcript đã sẵn sàng. Hãy kiểm tra văn bản rồi bấm Gửi.',
     recordingVoice: 'Đang ghi âm câu trả lời...',
     micUnsupported: 'Trình duyệt này không hỗ trợ ghi âm microphone.',
     micBlocked: 'Bạn chưa cấp quyền microphone hoặc không tìm thấy microphone.',
@@ -187,11 +186,11 @@ const interviewCopy = {
   },
 }
 
-const awsSteps = [
-  { label: 'Amazon Polly', value: 'Question audio generation' },
-  { label: 'Amazon Transcribe', value: 'Voice answer to text' },
-  { label: 'Amazon Bedrock', value: 'AI scoring and feedback' },
-  { label: 'Amazon S3', value: 'Audio and transcript storage' },
+const voiceWorkflowSteps = [
+  { label: 'Question Voice', value: 'Read interview questions aloud' },
+  { label: 'Speech Transcript', value: 'Turn voice answers into editable text' },
+  { label: 'AI Feedback', value: 'Score answers and suggest improvements' },
+  { label: 'Saved Session', value: 'Keep answers, notes, and progress history' },
 ]
 
 const ONLINE_VIETNAMESE_VOICE_URI = 'online-vietnamese-voice'
@@ -224,7 +223,7 @@ const interviewRoles = [
     mark: 'AI',
     count: 82,
     focus: 'Python, LLMs, RAG',
-    skills: ['Python', 'Machine Learning', 'LLM', 'RAG', 'AWS Bedrock', 'Vector Database'],
+    skills: ['Python', 'Machine Learning', 'LLM', 'RAG', 'Model Integration', 'Vector Database'],
     description: 'Build AI features, integrate models, and evaluate production behavior.',
     questionGroups: [
       [
@@ -247,8 +246,8 @@ const interviewRoles = [
     category: 'ai',
     mark: 'GA',
     count: 74,
-    focus: 'Prompting, RAG, Bedrock',
-    skills: ['Prompt Engineering', 'RAG', 'AWS Bedrock', 'Vector Search', 'Guardrails', 'Evaluation'],
+    focus: 'Prompting, RAG, evaluation',
+    skills: ['Prompt Engineering', 'RAG', 'Model Integration', 'Vector Search', 'Guardrails', 'Evaluation'],
     description: 'Create LLM workflows with prompts, retrieval, safety, and evaluation.',
     questionGroups: [
       [
@@ -260,7 +259,7 @@ const interviewRoles = [
         'How would you compare two prompt versions before releasing one to users?',
       ],
       [
-        'Design a serverless GenAI workflow using API Gateway, Lambda, Bedrock, and DynamoDB.',
+        'Design a scalable GenAI workflow with an API layer, processing functions, model integration, and persistent storage.',
         'How would you add guardrails, logging, and fallback behavior to a GenAI application?',
       ],
     ],
@@ -320,7 +319,7 @@ const interviewRoles = [
     mark: 'MO',
     count: 58,
     focus: 'CI/CD, model ops, observability',
-    skills: ['Docker', 'CI/CD', 'Model Registry', 'Monitoring', 'AWS Lambda', 'CloudWatch'],
+    skills: ['Docker', 'CI/CD', 'Model Registry', 'Monitoring', 'Service Runtime', 'Observability'],
     description: 'Automate model delivery, monitoring, rollback, and operational controls.',
     questionGroups: [
       [
@@ -328,7 +327,7 @@ const interviewRoles = [
         'What checks should happen before promoting a model or prompt change to production?',
       ],
       [
-        'How would you monitor model latency, failures, cost, and quality from CloudWatch logs?',
+        'How would you monitor model latency, failures, cost, and quality from logs and dashboards?',
         'If a deployed AI service starts failing, what rollback and debugging steps would you take?',
       ],
       [
@@ -344,7 +343,7 @@ const interviewRoles = [
     mark: 'DE',
     count: 61,
     focus: 'Pipelines, storage, quality',
-    skills: ['Python', 'SQL', 'ETL', 'DynamoDB', 'S3', 'Data Quality'],
+    skills: ['Python', 'SQL', 'ETL', 'NoSQL', 'File Storage', 'Data Quality'],
     description: 'Build reliable pipelines and storage models for AI-ready data.',
     questionGroups: [
       [
@@ -353,7 +352,7 @@ const interviewRoles = [
       ],
       [
         'How would you model interview history for fast reads across users and devices?',
-        'How would you choose between DynamoDB, S3, and relational storage for interview data?',
+        'How would you choose between NoSQL, file storage, and relational storage for interview data?',
       ],
       [
         'If a data pipeline creates duplicate or missing records, how would you debug it?',
@@ -440,20 +439,20 @@ const interviewRoles = [
     mark: 'BE',
     count: 57,
     focus: 'APIs, queues, AI services',
-    skills: ['Python', 'API Gateway', 'AWS Lambda', 'DynamoDB', 'Bedrock', 'Error Handling'],
+    skills: ['Python', 'REST APIs', 'Serverless Functions', 'NoSQL Database', 'AI Integration', 'Error Handling'],
     description: 'Build APIs that connect AI services, storage, and secure workflows.',
     questionGroups: [
       [
         'How would you design a backend API that creates AI interview questions from a CV?',
-        'How would you structure Lambda functions for upload, analysis, interview, scoring, and history?',
+        'How would you structure backend functions for upload, analysis, interview, scoring, and history?',
       ],
       [
         'How would you handle retries, timeouts, and fallback behavior when an AI provider fails?',
-        'How would you design IAM permissions for a backend service that reads CV data and writes interview results?',
+        'How would you design access permissions for a backend service that reads CV data and writes interview results?',
       ],
       [
-        'How would you store answers, attempts, scores, and audit logs in DynamoDB?',
-        'How would you debug an API Gateway route that returns Internal Server Error during an AI call?',
+        'How would you store answers, attempts, scores, and audit logs in a database?',
+        'How would you debug an API route that returns Internal Server Error during an AI call?',
       ],
     ],
   },
@@ -487,19 +486,23 @@ export default function Interview({
   const shouldProcessRecordingRef = useRef(false)
   const chunksRef = useRef([])
   const cvIdRef = useRef(cvAnalysis?.cvId)
+  const sessionLanguageRef = useRef(normalizeLanguage(language || loadSettings().language))
+  const activeLanguageRef = useRef(sessionLanguageRef.current)
+  const currentUserRef = useRef(currentUser)
   const initialQuestionCountRef = useRef(getStoredInterviewQuestionCount())
   const activeLanguage = normalizeLanguage(language || loadSettings().language)
   const appCopy = getAppCopy(activeLanguage)
   const languageConfig = getLanguageConfig(activeLanguage)
   const copy = interviewCopy[activeLanguage]
+  const noCvTitleRef = useRef(copy.noCvTitle)
   const voiceSteps = activeLanguage === 'vi'
     ? [
-      { label: 'Online Vietnamese Voice', value: 'Đọc câu hỏi tiếng Việt' },
-      { label: 'Amazon Transcribe', value: 'Giọng nói sang văn bản vi-VN' },
-      { label: 'Amazon Bedrock', value: 'AI feedback' },
-      { label: 'Amazon S3', value: 'Lưu audio' },
+      { label: 'Giọng đọc câu hỏi', value: 'Đọc câu hỏi phỏng vấn thành tiếng' },
+      { label: 'Transcript giọng nói', value: 'Chuyển câu trả lời thành văn bản có thể sửa' },
+      { label: 'Feedback AI', value: 'Chấm điểm và gợi ý cải thiện' },
+      { label: 'Phiên đã lưu', value: 'Giữ câu trả lời, ghi chú và lịch sử tiến độ' },
     ]
-    : awsSteps
+    : voiceWorkflowSteps
   const hasInterviewCv = Boolean(cvAnalysis?.cvId)
   const initialRoleProfile = createCvRoleProfile(cvAnalysis)
 
@@ -513,7 +516,7 @@ export default function Interview({
     language: activeLanguage,
   }))
   const [messages, setMessages] = useState(() => (
-    hasInterviewCv ? createInitialMessages(session, currentUser, activeLanguage) : []
+    hasInterviewCv ? createInitialInterviewMessages(session, currentUser) : []
   ))
   const [questionIndex, setQuestionIndex] = useState(0)
   const [draft, setDraft] = useState('')
@@ -528,7 +531,7 @@ export default function Interview({
   const [interviewResult, setInterviewResult] = useState(null)
   const [isCompleted, setIsCompleted] = useState(false)
   const [interviewSource, setInterviewSource] = useState('Mock AI')
-  const [apiStatus, setApiStatus] = useState('Connecting to AWS interview API...')
+  const [apiStatus, setApiStatus] = useState('Preparing interview session...')
   const [isChatExpanded, setIsChatExpanded] = useState(false)
   const [speechVoices, setSpeechVoices] = useState([])
   const [selectedSpeechVoiceURI, setSelectedSpeechVoiceURI] = useState(() => {
@@ -545,6 +548,9 @@ export default function Interview({
   const currentQuestion = hasInterviewCv ? (session.questions[questionIndex] ?? session.questions[0]) : ''
   const progress = questionCount ? Math.round(((questionIndex + 1) / questionCount) * 100) : 0
   const answeredCount = answerReviews.length
+  const interviewSourceLabel = interviewSource === 'AWS'
+    ? activeLanguage === 'vi' ? 'AI trực tuyến' : 'Live AI'
+    : activeLanguage === 'vi' ? 'Luyện tập offline' : 'Offline practice'
   const cvRoleProfile = createCvRoleProfile(cvAnalysis)
   const visibleRoles = filterInterviewRoles({ category: roleCategory, query: roleQuery })
   const isUsingCvRole = selectedRole.id === 'cv-role'
@@ -594,6 +600,12 @@ export default function Interview({
   }, [activeLanguage, selectedSpeechVoiceURI])
 
   useEffect(() => {
+    activeLanguageRef.current = activeLanguage
+    currentUserRef.current = currentUser
+    noCvTitleRef.current = copy.noCvTitle
+  }, [activeLanguage, currentUser, copy.noCvTitle])
+
+  useEffect(() => {
     if (cvIdRef.current === cvAnalysis?.cvId) {
       return
     }
@@ -606,10 +618,13 @@ export default function Interview({
     let isMounted = true
 
     async function loadAwsInterview() {
+      const sessionLanguage = activeLanguageRef.current
+      const interviewUser = currentUserRef.current
+      sessionLanguageRef.current = sessionLanguage
       const localSession = createInterviewSession(cvAnalysis, {
         roleProfile: selectedRole,
         questionCount: selectedQuestionCount,
-        language: activeLanguage,
+        language: sessionLanguage,
       })
 
       if (!hasInterviewCv) {
@@ -621,21 +636,21 @@ export default function Interview({
         setInterviewResult(null)
         setIsCompleted(false)
         setInterviewSource('Waiting for CV')
-        setApiStatus(copy.noCvTitle)
+        setApiStatus(noCvTitleRef.current)
         return
       }
 
-      setApiStatus(activeLanguage === 'vi'
+      setApiStatus(sessionLanguage === 'vi'
         ? `Đang tạo câu hỏi phỏng vấn cho ${selectedRole.label}...`
         : `Creating ${selectedRole.label} interview questions...`)
 
       try {
         const awsSession = await createInterviewOnAws({
           cvAnalysis,
-          currentUser,
+          currentUser: interviewUser,
           roleProfile: selectedRole,
           questionCount: selectedQuestionCount,
-          language: activeLanguage,
+          language: sessionLanguage,
         })
 
         if (!isMounted || !awsSession.questions.length) {
@@ -643,28 +658,28 @@ export default function Interview({
         }
 
         setSession(awsSession)
-        setMessages(createInitialMessages(awsSession, currentUser, activeLanguage))
+        setMessages(createInitialInterviewMessages(awsSession, interviewUser))
         setQuestionIndex(0)
         setAnswerReviews([])
         setInterviewResult(null)
         setIsCompleted(false)
         setInterviewSource('AWS')
-        setApiStatus(activeLanguage === 'vi'
-          ? `Đang dùng AWS Lambda + DynamoDB cho ${awsSession.role}`
-          : `Using AWS Lambda + DynamoDB for ${awsSession.role}`)
+        setApiStatus(sessionLanguage === 'vi'
+          ? `Phiên phỏng vấn đã sẵn sàng cho ${awsSession.role}`
+          : `Interview session ready for ${awsSession.role}`)
       } catch (error) {
         if (isMounted) {
           setSession(localSession)
-          setMessages(createInitialMessages(localSession, currentUser, activeLanguage))
+          setMessages(createInitialInterviewMessages(localSession, interviewUser))
           setQuestionIndex(0)
           setDraft('')
           setAnswerReviews([])
           setInterviewResult(null)
           setIsCompleted(false)
           setInterviewSource('Mock AI')
-          setApiStatus(activeLanguage === 'vi'
-            ? `Đang dùng fallback cục bộ cho ${localSession.role}: ${error.message}`
-            : `Using local fallback for ${localSession.role}: ${error.message}`)
+          setApiStatus(sessionLanguage === 'vi'
+            ? `Đang dùng chế độ luyện tập offline cho ${localSession.role}`
+            : `Using offline practice mode for ${localSession.role}`)
         }
       }
     }
@@ -674,7 +689,7 @@ export default function Interview({
     return () => {
       isMounted = false
     }
-  }, [cvAnalysis, currentUser, hasInterviewCv, selectedRole, selectedQuestionCount, activeLanguage, copy])
+  }, [cvAnalysis, currentUser?.userId, hasInterviewCv, selectedRole, selectedQuestionCount])
 
   async function resetInterview(
     nextSession = createInterviewSession(cvAnalysis, {
@@ -690,11 +705,13 @@ export default function Interview({
       return
     }
 
+    const sessionLanguage = activeLanguage
+    sessionLanguageRef.current = sessionLanguage
     stopSpeaking()
     stopQuestionAudio()
     stopBrowserSpeechRecognition()
     stopRecording({ process: false })
-    setApiStatus(activeLanguage === 'vi'
+    setApiStatus(sessionLanguage === 'vi'
       ? `Đang tạo phiên phỏng vấn mới cho ${roleProfile.label}...`
       : `Creating a new ${roleProfile.label} interview session...`)
 
@@ -704,21 +721,21 @@ export default function Interview({
         currentUser,
         roleProfile,
         questionCount: questionCountValue,
-        language: activeLanguage,
+        language: sessionLanguage,
       })
       setSession(awsSession)
-      setMessages(createInitialMessages(awsSession, currentUser, activeLanguage))
+      setMessages(createInitialInterviewMessages(awsSession, currentUser))
       setInterviewSource('AWS')
-      setApiStatus(activeLanguage === 'vi'
-        ? `Đang dùng AWS Lambda + DynamoDB cho ${awsSession.role}`
-        : `Using AWS Lambda + DynamoDB for ${awsSession.role}`)
+      setApiStatus(sessionLanguage === 'vi'
+        ? `Phiên phỏng vấn đã sẵn sàng cho ${awsSession.role}`
+        : `Interview session ready for ${awsSession.role}`)
     } catch (error) {
       setSession(nextSession)
-      setMessages(createInitialMessages(nextSession, currentUser, activeLanguage))
+      setMessages(createInitialInterviewMessages(nextSession, currentUser))
       setInterviewSource('Mock AI')
-      setApiStatus(activeLanguage === 'vi'
-        ? `Đang dùng fallback cục bộ cho ${nextSession.role}: ${error.message}`
-        : `Using local fallback for ${nextSession.role}: ${error.message}`)
+      setApiStatus(sessionLanguage === 'vi'
+        ? `Đang dùng chế độ luyện tập offline cho ${nextSession.role}`
+        : `Using offline practice mode for ${nextSession.role}`)
     }
 
     setQuestionIndex(0)
@@ -851,12 +868,12 @@ export default function Interview({
           if (browserTranscript) {
             setDraft(browserTranscript)
             setVoiceError(activeLanguage === 'vi'
-              ? `AWS Transcribe chưa dùng được, đang dùng nhận diện giọng nói của trình duyệt: ${error.message}`
-              : `AWS Transcribe unavailable, using browser speech recognition: ${error.message}`)
+              ? 'Transcript online chưa dùng được, đang dùng nhận diện giọng nói của trình duyệt.'
+              : 'Online transcript is unavailable, using browser speech recognition.')
           } else {
             setVoiceError(activeLanguage === 'vi'
-              ? `AWS Transcribe chưa dùng được: ${error.message}. Chưa tạo được transcript, hãy nhập câu trả lời thủ công hoặc kiểm tra AWS route/IAM.`
-              : `AWS Transcribe unavailable: ${error.message}. No transcript was generated. Please type your answer manually or check AWS route/IAM.`)
+              ? 'Chưa tạo được transcript. Hãy nhập câu trả lời thủ công hoặc thử ghi âm lại.'
+              : 'No transcript was generated. Please type your answer manually or try recording again.')
           }
         } finally {
           setIsTranscribing(false)
@@ -866,7 +883,7 @@ export default function Interview({
       recorderRef.current = recorder
       shouldProcessRecordingRef.current = true
       startBrowserSpeechRecognition()
-      recorder.start()
+      recorder.start(1000)
       setIsRecording(true)
       setVoiceError(copy.recordingVoice)
     } catch {
@@ -880,6 +897,12 @@ export default function Interview({
     stopBrowserSpeechRecognition()
 
     if (recorderRef.current?.state === 'recording') {
+      try {
+        recorderRef.current.requestData()
+      } catch {
+        // Some browsers do not support forcing the last recording chunk.
+      }
+
       recorderRef.current.stop()
     } else {
       stopAudioStream()
@@ -931,6 +954,14 @@ export default function Interview({
     recognition.onend = () => {
       if (browserSpeechRecognitionRef.current === recognition) {
         browserSpeechRecognitionRef.current = null
+
+        if (recorderRef.current?.state === 'recording') {
+          window.setTimeout(() => {
+            if (recorderRef.current?.state === 'recording' && !browserSpeechRecognitionRef.current) {
+              startBrowserSpeechRecognition()
+            }
+          }, 250)
+        }
       }
     }
 
@@ -1067,11 +1098,11 @@ export default function Interview({
       if (speechResult.spoken) {
         setVoiceError(activeLanguage === 'vi'
           ? `${copy.browserVoice} (${speechResult.voiceName}): ${error.message}`
-          : `AWS Polly unavailable, using browser voice (${speechResult.voiceName}): ${error.message}`)
+          : `Online question voice unavailable, using browser voice (${speechResult.voiceName}).`)
       } else {
         setVoiceError(activeLanguage === 'vi'
           ? `Không đọc được câu hỏi bằng giọng nói: ${error.message}`
-          : `AWS Polly unavailable and browser text-to-speech is not supported: ${error.message}`)
+          : 'Question voice is unavailable and browser text-to-speech is not supported.')
       }
     } finally {
       setIsQuestionAudioLoading(false)
@@ -1123,8 +1154,8 @@ export default function Interview({
         : await askMockAi({ answer, question: currentQuestion, questionIndex, language: activeLanguage })
     } catch (error) {
       setApiStatus(activeLanguage === 'vi'
-        ? `API chấm câu trả lời AWS lỗi, dùng fallback: ${error.message}`
-        : `AWS answer API failed, using fallback: ${error.message}`)
+        ? 'Chấm điểm online chưa dùng được, đang dùng feedback offline.'
+        : 'Online scoring is unavailable, using offline feedback.')
       setInterviewSource('Mock AI')
       aiResult = await askMockAi({ answer, question: currentQuestion, questionIndex, language: activeLanguage })
     }
@@ -1165,7 +1196,12 @@ export default function Interview({
     const aiMessage = {
       id: createId(),
       sender: 'ai',
-      text: getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion, language: activeLanguage }),
+      kind: 'review',
+      feedback: aiResult.feedback,
+      shouldAdvance,
+      isLastQuestion,
+      nextQuestion,
+      text: getLocalizedAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion, language: activeLanguage }),
       score: aiResult.score,
       createdAt: new Date().toISOString(),
     }
@@ -1331,7 +1367,7 @@ export default function Interview({
                   <div className="question-progress" aria-label="Question progress">
                     <span>{questionIndex + 1}/{session.questions.length}</span>
                     <div className="mini-progress"><i style={{ width: `${progress}%` }} /></div>
-                    <small>{interviewSource}</small>
+                    <small>{interviewSourceLabel}</small>
                   </div>
                 </div>
 
@@ -1392,7 +1428,7 @@ export default function Interview({
                 </div>
 
                 {cameraError ? <p className="interview-error">{cameraError}</p> : null}
-                {voiceError ? <p className="interview-error">{voiceError}</p> : null}
+                {voiceError ? <p className="interview-voice-status">{voiceError}</p> : null}
               </div>
 
               <div className="panel chat-panel">
@@ -1418,7 +1454,7 @@ export default function Interview({
 
                 <div className="message-list" aria-label="Interview messages">
                   {messages.map((message) => (
-                    <MessageBubble key={message.id} message={message} copy={copy} />
+                    <MessageBubble key={message.id} message={message} copy={copy} language={activeLanguage} />
                   ))}
                   {isAiThinking ? (
                     <div className="message-bubble ai thinking">
@@ -1688,20 +1724,70 @@ function getRoleCategoryLabel(category) {
   return roleCategories.find((item) => item.id === category)?.label || 'Custom Role'
 }
 
-function getAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion, language = 'en' }) {
-  const isVietnamese = language === 'vi'
+function createInitialInterviewMessages(session, currentUser) {
+  const candidateName = currentUser?.fullName ?? 'Candidate'
+  const role = session?.role || 'AI Interview'
+  const question = session?.questions?.[0] || ''
+
+  return [
+    {
+      id: createId(),
+      sender: 'ai',
+      kind: 'intro',
+      candidateName,
+      role,
+      question,
+      text: getIntroMessage({ candidateName, role, question, language: session?.language }),
+      createdAt: new Date().toISOString(),
+    },
+  ]
+}
+
+function getMessageText(message, language = 'en') {
+  if (message.kind === 'intro') {
+    return getIntroMessage({
+      candidateName: message.candidateName,
+      role: message.role,
+      question: message.question,
+      language,
+    })
+  }
+
+  if (message.kind === 'review') {
+    return getLocalizedAiResponseText({
+      aiResult: { feedback: message.feedback || '' },
+      shouldAdvance: message.shouldAdvance ?? true,
+      isLastQuestion: Boolean(message.isLastQuestion),
+      nextQuestion: message.nextQuestion || '',
+      language,
+    })
+  }
+
+  return message.text
+}
+
+function getIntroMessage({ candidateName = 'Candidate', role = 'AI Interview', question = '', language = 'en' }) {
+  const isVietnamese = normalizeLanguage(language) === 'vi'
+
+  return isVietnamese
+    ? `Xin ch\u00e0o ${candidateName}. T\u00f4i s\u1ebd ph\u1ecfng v\u1ea5n b\u1ea1n cho v\u1ecb tr\u00ed ${role}. ${question}`
+    : `Hello ${candidateName}. I will interview you for the ${role} position. ${question}`
+}
+
+function getLocalizedAiResponseText({ aiResult, shouldAdvance, isLastQuestion, nextQuestion, language = 'en' }) {
+  const isVietnamese = normalizeLanguage(language) === 'vi'
 
   if (!shouldAdvance) {
-    return `${aiResult.feedback}\n\n${isVietnamese ? 'Thử lại' : 'Try again'}: ${nextQuestion}`
+    return `${aiResult.feedback}\n\n${isVietnamese ? 'Th\u1eed l\u1ea1i' : 'Try again'}: ${nextQuestion}`
   }
 
   if (isLastQuestion) {
     return isVietnamese
-      ? `${aiResult.feedback}\n\nPhỏng vấn đã hoàn tất. Kết quả cuối cùng đã sẵn sàng bên dưới.`
+      ? `${aiResult.feedback}\n\nPh\u1ecfng v\u1ea5n \u0111\u00e3 ho\u00e0n t\u1ea5t. K\u1ebft qu\u1ea3 cu\u1ed1i c\u00f9ng \u0111\u00e3 s\u1eb5n s\u00e0ng b\u00ean d\u01b0\u1edbi.`
       : `${aiResult.feedback}\n\nInterview completed. Your final result is ready below.`
   }
 
-  return `${aiResult.feedback}\n\n${isVietnamese ? 'Câu hỏi tiếp theo' : 'Next question'}: ${nextQuestion}`
+  return `${aiResult.feedback}\n\n${isVietnamese ? 'C\u00e2u h\u1ecfi ti\u1ebfp theo' : 'Next question'}: ${nextQuestion}`
 }
 
 function getInterviewerStatus({
@@ -1885,14 +1971,16 @@ function BrowserVoicePicker({
   )
 }
 
-function MessageBubble({ message, copy }) {
+function MessageBubble({ message, copy, language }) {
+  const text = getMessageText(message, language)
+
   return (
     <div className={`message-bubble ${message.sender}`}>
       <div className="message-meta">
         <strong>{message.sender === 'ai' ? copy.aiInterviewer : copy.userLabel}</strong>
         {message.score ? <span>{copy.score} {message.score}/100</span> : null}
       </div>
-      <p>{message.text}</p>
+      <p>{text}</p>
     </div>
   )
 }

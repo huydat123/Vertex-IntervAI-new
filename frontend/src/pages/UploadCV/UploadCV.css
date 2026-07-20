@@ -174,9 +174,14 @@
   border-radius: 8px;
 }
 
+.upload-benefit > div {
+  min-width: 0;
+}
+
 .upload-benefit strong,
 .upload-benefit small {
   display: block;
+  overflow-wrap: anywhere;
 }
 
 .upload-benefit strong {
@@ -415,6 +420,10 @@
   transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
 }
 
+.upload-step > div {
+  min-width: 0;
+}
+
 .upload-step > span {
   display: grid;
   width: 34px;
@@ -431,6 +440,7 @@
 .upload-step p {
   display: block;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .upload-step strong {
@@ -487,6 +497,7 @@
 .upload-security-note p {
   display: block;
   margin: 0;
+  overflow-wrap: anywhere;
 }
 
 .upload-security-note strong {

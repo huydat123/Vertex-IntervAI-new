@@ -107,7 +107,7 @@ export default function Dashboard({
       ...interviews.slice(0, 2),
     ]
     : interviews
-  const firstName = currentUser.fullName?.split(' ')[0] ?? 'Candidate'
+  const firstName = currentUser.fullName?.trim().split(/\s+/)[0] || ''
   const cvCount = cvRows.length
   const visibleCvRows = showAllCvs ? cvRows : cvRows.slice(0, VISIBLE_CV_LIMIT)
   const hiddenCvCount = Math.max(0, cvRows.length - VISIBLE_CV_LIMIT)

@@ -110,7 +110,9 @@ Không commit file `frontend/.env` nếu có giá trị thật.
 - Tạo JWT Authorizer cho API Gateway.
 - Thêm route `GET /history` trỏ tới `history_api`.
 - Thêm backend `admin_api` cho users, CVs, interviews, review queue, audit log, export CSV, feedback email.
-- IAM cho `admin_api` cần quyền DynamoDB, Cognito admin read/list, S3 presigned URL, SES nếu gửi email.
+- Thêm route `POST /admin/users/action` để admin khóa, mở khóa hoặc xóa tài khoản ứng viên.
+- Thêm route `POST /admin/interviews/delete` để admin xóa bản ghi phỏng vấn không cần giữ lại.
+- IAM cho `admin_api` cần quyền DynamoDB `Scan`, `GetItem`, `PutItem`, `DeleteItem`, Cognito `ListUsers`, `AdminGetUser`, `AdminListGroupsForUser`, `AdminDisableUser`, `AdminEnableUser`, `AdminDeleteUser`, S3 presigned URL, SES nếu gửi email.
 - CloudWatch Logs dùng để debug Lambda/API Gateway.
 
 ## Tạm hoãn hoặc cần test tiếp
@@ -134,6 +136,8 @@ Không commit file `frontend/.env` nếu có giá trị thật.
    - `POST /polly_speech`
    - `POST /transcribe_audio`
    - `/admin/*`
+   - `POST /admin/users/action`
+   - `POST /admin/interviews/delete`
 3. Gắn JWT Authorizer cho các route cần bảo vệ.
 4. Thêm CORS/OPTIONS cho frontend domain.
 5. Cập nhật Lambda environment variables theo từng service.

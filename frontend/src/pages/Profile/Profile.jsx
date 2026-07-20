@@ -381,7 +381,7 @@ function clearLegacyDemoProfile(profile, currentUser) {
 }
 
 function getDisplayUser(currentUser, profile) {
-  const fullName = profile.fullName?.trim() || currentUser.fullName || currentUser.email || 'User'
+  const fullName = profile.fullName?.trim() || currentUser.fullName || ''
   const email = profile.email?.trim() || currentUser.email || ''
 
   return {

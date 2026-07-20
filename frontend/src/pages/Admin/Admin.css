@@ -189,6 +189,47 @@
   font-weight: 800;
 }
 
+.admin-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: #fbfbfe;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.admin-filter-field {
+  display: grid;
+  gap: 7px;
+}
+
+.admin-filter-field span {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-filter-field input,
+.admin-filter-field select {
+  width: 100%;
+  min-height: 40px;
+  padding: 0 12px;
+  color: #202432;
+  background: #ffffff;
+  border: 1px solid #dfe4ee;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.admin-filter-field input::placeholder {
+  color: #9ca3af;
+}
+
 .admin-overview-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -198,6 +239,115 @@
 .admin-list-panel,
 .admin-table-panel {
   min-height: 260px;
+}
+
+.admin-action-panel,
+.admin-health-panel {
+  min-height: auto;
+}
+
+.admin-overview-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-overview-action {
+  display: grid;
+  min-height: 154px;
+  gap: 8px;
+  align-content: start;
+  padding: 14px;
+  text-align: left;
+  background: #fbfbfe;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.admin-overview-action:hover {
+  border-color: #2563eb;
+  box-shadow: 0 14px 32px rgba(37, 99, 235, 0.12);
+  transform: translateY(-1px);
+}
+
+.admin-overview-action > span {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  color: #2563eb;
+  background: #eaf1ff;
+  border-radius: 8px;
+}
+
+.admin-overview-action.purple > span {
+  color: #6d28d9;
+  background: #f3efff;
+}
+
+.admin-overview-action.green > span {
+  color: #047857;
+  background: #e6f8f1;
+}
+
+.admin-overview-action.orange > span {
+  color: #c2410c;
+  background: #fff1e7;
+}
+
+.admin-overview-action strong,
+.admin-overview-action small,
+.admin-overview-action em {
+  display: block;
+}
+
+.admin-overview-action strong {
+  color: #202432;
+  font-weight: 900;
+}
+
+.admin-overview-action small {
+  color: #7b8191;
+  line-height: 1.45;
+}
+
+.admin-overview-action em {
+  margin-top: auto;
+  color: #2563eb;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.admin-health-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.admin-health-card {
+  display: grid;
+  gap: 8px;
+  min-height: 92px;
+  padding: 14px;
+  background: #fbfbfe;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.admin-health-card span {
+  color: #7b8191;
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-health-card strong {
+  color: #111827;
+  font-size: 28px;
+  line-height: 1;
 }
 
 .admin-compact-list {
@@ -259,7 +409,7 @@
 
 .admin-table {
   width: 100%;
-  min-width: 760px;
+  min-width: 940px;
   border-collapse: separate;
   border-spacing: 0 8px;
 }
@@ -317,6 +467,59 @@
 .admin-command-button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.admin-row-action.warning {
+  color: #7c2d12;
+  background: #ffedd5;
+}
+
+.admin-row-action.success {
+  color: #065f46;
+  background: #d1fae5;
+}
+
+.admin-row-action.danger {
+  color: #ffffff;
+  background: #dc2626;
+}
+
+.admin-user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-status-pill.success {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.admin-status-pill.danger {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.admin-status-pill.warning {
+  color: #92400e;
+  background: #fef3c7;
+}
+
+.admin-status-pill.neutral {
+  color: #4b5563;
+  background: #eef2f7;
 }
 
 .admin-panel-actions {
@@ -533,6 +736,7 @@
   }
 
   .admin-export-grid,
+  .admin-overview-actions,
   .admin-feedback-form {
     grid-template-columns: 1fr;
   }

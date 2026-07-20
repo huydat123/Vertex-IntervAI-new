@@ -4,13 +4,13 @@ const fallbackQuestions = {
   en: [
     'Tell me about one technical project from your CV and your main responsibility in it.',
     'How would you design a React dashboard that consumes data from multiple APIs?',
-    'Explain how AWS Lambda, S3, and DynamoDB can work together in a serverless application.',
+    'Explain how an API layer, file storage, and a database can work together in a modern application.',
     'Describe a difficult bug you solved and how you approached debugging it.',
   ],
   vi: [
     'Hãy giới thiệu một dự án kỹ thuật trong CV và trách nhiệm chính của bạn trong dự án đó.',
     'Bạn sẽ thiết kế dashboard React lấy dữ liệu từ nhiều API như thế nào?',
-    'Hãy giải thích cách AWS Lambda, S3 và DynamoDB phối hợp trong một ứng dụng serverless.',
+    'Hãy giải thích cách API, lưu trữ file và database phối hợp trong một ứng dụng hiện đại.',
     'Hãy mô tả một lỗi khó bạn từng xử lý và cách bạn debug.',
   ],
 }
@@ -47,13 +47,13 @@ function getSkills(cvAnalysis, roleProfile) {
   const cvSkills = cvAnalysis?.skills?.filter(Boolean) ?? []
   const skills = mergeUnique(roleSkills, cvSkills)
 
-  return skills.length ? skills.slice(0, 8) : ['React', 'Python', 'AWS', 'Database']
+  return skills.length ? skills.slice(0, 8) : ['React', 'Python', 'API', 'Database']
 }
 
 function createQuestionBank({ skills, suggestedRole, cvAnalysis, roleProfile, language }) {
   const primarySkill = skills[0] ?? 'React'
   const secondSkill = skills[1] ?? 'Python'
-  const thirdSkill = skills[2] ?? 'AWS'
+  const thirdSkill = skills[2] ?? 'API'
   const project = cvAnalysis?.projects?.[0] ?? 'your most important project'
 
   if (language === 'vi') {
@@ -77,8 +77,8 @@ function createQuestionBank({ skills, suggestedRole, cvAnalysis, roleProfile, la
         'Bạn sẽ tổ chức component React cho dashboard có upload, profile và interview pages như thế nào?',
       ],
       [
-        `Hãy giải thích cách ${thirdSkill}, API Gateway và database phối hợp trong ứng dụng serverless.`,
-        'Nếu Lambda API trả về Internal Server Error, bạn sẽ kiểm tra log và cấu hình nào trước?',
+        `Hãy giải thích cách ${thirdSkill}, backend service và database phối hợp trong ứng dụng hiện đại.`,
+        'Nếu API trả về Internal Server Error, bạn sẽ kiểm tra log và cấu hình nào trước?',
         'Bạn sẽ thiết kế permission thế nào để backend đọc dữ liệu CV an toàn?',
       ],
       [
@@ -114,8 +114,8 @@ function createQuestionBank({ skills, suggestedRole, cvAnalysis, roleProfile, la
       `How would you organize React components for a dashboard with upload, profile, and interview pages?`,
     ],
     [
-      `Explain how ${thirdSkill}, API Gateway, and a database can work together in a serverless application.`,
-      `If a Lambda API returns Internal Server Error, what logs and configuration would you check first?`,
+      `Explain how ${thirdSkill}, a backend service, and a database can work together in a modern application.`,
+      `If an API returns Internal Server Error, what logs and configuration would you check first?`,
       `How would you design permissions so a backend service can read CV data securely?`,
     ],
     [
@@ -333,16 +333,16 @@ export function createInitialMessages(session, currentUser, language = 'en') {
 export function createMockTranscript(questionIndex, language = 'en') {
   const transcripts = normalizeLanguage(language) === 'vi'
     ? [
-      'Tôi là sinh viên lập trình tập trung vào React, Python và AWS. Kỹ năng mạnh nhất của tôi là xây dựng giao diện rõ ràng và kết nối với backend API.',
+      'Tôi là sinh viên lập trình tập trung vào React, Python và backend API. Kỹ năng mạnh nhất của tôi là xây dựng giao diện rõ ràng và kết nối dữ liệu ổn định.',
       'Trong dự án Talent Graph, tôi dùng React để xây dashboard, màn hình upload CV và luồng phỏng vấn. Tôi tập trung vào cấu trúc component và trải nghiệm người dùng.',
       'Để API đáng tin cậy hơn, tôi sẽ validate input, xử lý lỗi rõ ràng, ghi log lỗi và thiết kế retry cho service bên ngoài.',
-      'Trước khi deploy tính năng AWS, tôi sẽ kiểm tra IAM permission, environment variables, logs và access pattern của DynamoDB.',
+      'Trước khi deploy tính năng mới, tôi sẽ kiểm tra quyền truy cập, environment variables, logs và cách truy vấn database.',
     ]
     : [
-      'I am a student developer focusing on React, Python, and AWS. My strongest skill is building clear frontend interfaces and connecting them with backend APIs.',
+      'I am a student developer focusing on React, Python, and backend APIs. My strongest skill is building clear frontend interfaces and connecting them with reliable data flows.',
       'In my Talent Graph project, I used React to build the dashboard, upload CV screen, and interview workflow. I focused on component structure and user experience.',
       'For API reliability, I would validate input, handle errors consistently, log failures, and design retries for external services.',
-      'Before deploying AWS features, I would check IAM permissions, environment variables, logs, and DynamoDB access patterns.',
+      'Before deploying new features, I would check access permissions, environment variables, logs, and database access patterns.',
     ]
 
   return transcripts[questionIndex % transcripts.length]
@@ -811,7 +811,7 @@ function createQuestionCoaching({ question, answer, currentUser, session, cvAnal
           ? 'Đừng chỉ trả lời “không biết”. Hãy nói bạn sẽ kiểm tra bước nào trước, kể cả khi chưa chắc hoàn toàn.'
           : 'Thêm hành động cụ thể để tăng độ tin cậy backend thay vì nói chung chung.',
         structure: 'Validate input + error handling + logs + tests + deployment checks.',
-        sampleAnswer: `Để cải thiện độ tin cậy của API xây bằng ${skill}, em sẽ validate input, trả lỗi rõ ràng, thêm logging cho failure và viết unit/integration test cho các case quan trọng. Em cũng kiểm tra environment variables, database permissions, timeout và API Gateway trước khi deploy. Việc này giúp API fail an toàn và debug production dễ hơn.`,
+        sampleAnswer: `Để cải thiện độ tin cậy của API xây bằng ${skill}, em sẽ validate input, trả lỗi rõ ràng, thêm logging cho failure và viết unit/integration test cho các case quan trọng. Em cũng kiểm tra environment variables, database permissions, timeout và cấu hình routing trước khi deploy. Việc này giúp API fail an toàn và debug production dễ hơn.`,
         upgrade: 'Nhắc một status code, log example hoặc test case cụ thể.',
       }
     }
@@ -876,7 +876,7 @@ function createQuestionCoaching({ question, answer, currentUser, session, cvAnal
         ? 'Avoid answering with only "no" or "I do not know". Say what you would check first, even if you are not fully sure.'
         : 'Add concrete backend reliability actions instead of staying general.',
       structure: 'Input validation + error handling + logs + tests + deployment checks.',
-      sampleAnswer: `To improve the reliability of an API built with ${skill}, I would validate all input data, return clear error messages, add logging for failures, and write unit or integration tests for important cases. I would also check environment variables, database permissions, timeout settings, and API Gateway configuration before deployment. This helps the API fail safely and makes production bugs easier to debug.`,
+      sampleAnswer: `To improve the reliability of an API built with ${skill}, I would validate all input data, return clear error messages, add logging for failures, and write unit or integration tests for important cases. I would also check environment variables, database permissions, timeout settings, and routing configuration before deployment. This helps the API fail safely and makes production bugs easier to debug.`,
       upgrade: 'Mention one specific status code, log example, or test case.',
     }
   }

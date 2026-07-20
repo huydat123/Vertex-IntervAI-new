@@ -29,7 +29,7 @@ export async function uploadCvToAws(file, userId = DEMO_USER_ID) {
     })
   } catch {
     throw new Error(
-      'Cannot connect to upload API. Please check API Gateway CORS/OPTIONS configuration and Lambda URL.',
+      'Cannot connect to the upload service. Please check the app connection and try again.',
     )
   }
 
@@ -69,7 +69,7 @@ export async function analyzeCvOnAws(uploadedCv, userId = DEMO_USER_ID) {
     })
   } catch {
     throw new Error(
-      'Cannot connect to analyze API. Please check API Gateway CORS/OPTIONS configuration and Lambda URL.',
+      'Cannot connect to the analysis service. Please check the app connection and try again.',
     )
   }
 
